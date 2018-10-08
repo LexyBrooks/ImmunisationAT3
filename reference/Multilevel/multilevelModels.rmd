@@ -1,0 +1,191 @@
+---
+title: "multilevel Models"
+author: "Kirsty Kitto"
+date: "May 26 2018"
+output:
+  html_notebook: default
+  html_document: default
+---
+
+We have already  seen these very quickly in Module 2! (See Multilevel/Hierarchical models in the <a href="https://canvas.uts.edu.au/files/55694/download?download_frd=1">Advanced Regression workbook</a>. But I am betting you did not pay much attention so we will revisit it here...) 
+
+This class of model has many  different names (this seems to have occurred because they have emerged independently from multiple scientific fields): 
+
+- multilevel model
+- Random effects model
+- Mixed model
+- Random coefficient model
+- Hierarchical model
+
+They become necessary when there is some sort of hierarchical or clustering structure to our data. Statistical models that are not hierarchical sometimes ignore the structure that results (from e.g. covariance within clusters) which can lead to poor models.  So it is important to consider whether your dataset has some sort of hierarchichal structure when you are trying to model it. 
+
+For example: 
+
+- Alcohol use within a family is related because family members share an unobserved "family effect”: common genes, diets, family culture and other unmeasured factors.  
+- Repeated observations within a neighborhood can be correlated because neighbors often share things like common traditions, access to services, socio-demographic status, stress levels, and other factors.  
+- Performing repeated measurements on individuals (e.g. in a longitudinal trial) often results in situations where the variation *within the data describing one individual* will vary less than that *between* individuals.
+
+Terms like *fixed* and *random* effects often get thrown around in these situations, but there is no one agreed upon definition (it appears to depend upon the field from which the technique you are looking at originated) so you need to be very careful! Gelman has given a very nice discussion of this problem:     
+- http://andrewgelman.com/2005/01/25/why_i_dont_use/   
+
+There are a number of ways to construct these models, but here we will just look at linear mixed effects models. The `lme4` package contains both the `lmer` function for linear mixed models, and `glmer` for generalized mixed models. This workbook is going to give you a quick introduction to using it! 
+
+```{r}
+library(lme4)
+library(tidyverse)
+```
+
+Let's go and get some data from an excellent tutorial on using the `lme4` function: http://www.bodowinter.com/tutorial/bw_LME_tutorial2.pdf. If you would like to learn more about this important class of model then it would be a great idea to work through the full tutorial! 
+
+**NB:** This tutorial makes use of a specific definition of fixed and random effects that is specific to the `lme4` package. So while it is important for you to understand how the `lme4` package uses these terms, be very, very, careful! Other fields can use the terms in different ways! (See http://andrewgelman.com/2005/01/25/why_i_dont_use/)
+
+```{r, cache=TRUE}
+politenessData<-read_csv("http://www.bodowinter.com/tutorial/politeness_data.csv")
+politenessData
+```
+
+Essentially this dataset looks at the relationship between politeness and pitch (or tone of voice) for a variety of different subjects (both male and female) in a number of different scenarios. 
+
+What if we consider a linear model that tries to explain the pitch of someone's voice:  $frequency \sim attitude + \epsilon$. Essentially this model would say that the pitch of someones voice is proportional to their attitutde (e.g. rude vs polite), plus some other random variation... 
+
+Is this a good approach? What other models can you imagine? Let's see if there actually *is* any relationship between attitude and frequency using a boxplot:
+
+```{r}
+ggplot(politenessData) + geom_boxplot(aes(x=attitude,y=frequency))
+```
+
+Hmmmm... there is not much to see if we just split on the attitude. What is going wrong with our data? 
+
+Well... on the whole men tend to have a lower pitched voice than women. So we have *two groups* and probably need to be a bit careful about this when we construct a model of how frequency depends on attitude! Maybe this is reflected in our data...  If you think about it a bit more, then one sensible way in which to approach this dataset would be to split into gender, then into subject, then look at what is going on for each subject. (A very good thing to look at to help you think about how you might construct models like this is the Causal Diagrams MOOC on edX: https://courses.edx.org/courses/course-v1:HarvardX+PH559x+3T2017/course/). 
+
+So. There should be some sort of way to naturally break our data up into levels. At a first guess try modelling the two groups (men and women). But then within each of those groups we might expect quite a bit of range for the individuals, so we could conceivably break our model down to another level at which we consider the responses of each individual. Is there anything in the data that would lead us to think this is a good idea? Lets try splitting on gender in the boxplot before we get too excited...
+
+```{r}
+ggplot(politenessData) + geom_boxplot(aes(x=gender,y=frequency,fill=attitude))
+```
+
+Interesting, looks like we might be on the right track! This diagram is showing us that it is important to appropriately split our data into subgroups before we perform our analysis, as otherwise we are unlikely to find any effects at all! 
+
+Ok. We have some reason to suppose that gender is a very strong determiner of pitch, with the attitude of the person maybe coming in as a secondary effect. This is a great indicator that a multilevel model is probably a good idea. How do we proceed?
+
+Basically, we need to add an extra term to the model we were hypothesising about above: $frequency \sim attitude + sex + \epsilon$
+
+But, a new problem presents: how do we know that the noise term will be the same for both groups? It might not be. This is where the real strength of multilevel modelling comes to the fore... 
+We are going to add complexity to the $\epsilon$, to reflect the fact that the random term might vary differently for different categories. (Cool huh?)
+
+To understand what this concept means, we need to extend our understanding of noise in our model. Let us go back and think about the assumptions we have been making in linear  models:
+
+- **Linear models:** divided the world into things that we somehow understand or that are somehow  systematic  (sometimes termed *fixed  effects*,  but really they are the  explanatory  variables);  and  things that we cannot control for or that we don’t understand ($\epsilon$). 
+But  the  unsystematic  part  of  the  model  did  not  have  any  interesting  structure. (We assumed it did not when we specified that noise should be Gaussian!)
+- **Mixed  models:** add 
+one  or  more  random  effects to our  fixed  effects. 
+These random effects (sometimes termed *mixed effects*) give extra structure to the error term.
+
+So... for example, we  can   model   the   individual   differences in subjects  by   assuming   different random  intercepts  for  each  subject.  Then, the mixed model needs to estimate these intercepts for us!
+
+For the previous model, we  add  a  random  effect  for  "subject" to characterise the 
+idiosyncratic variation in pitch due to individual differences, and the scenario that they are in (formal, informal, etc.)
+
+This gives a new model:  $pitch \sim attitude + sex + (1|subject) + (1|scenario) + \epsilon$
+
+What does this notation even mean? 1 means intercept, so $(1|subject)$ means "assume a different intercept for  each subject" (and be sure to note that the same thing is going on for `scenario` in the above model!)
+
+To further understand this notation you should have a look at these pages: 
+
+* Section 2 in this vignette on lmer: https://cran.r-project.org/web/packages/lme4/vignettes/lmer.pdf
+* https://stats.stackexchange.com/questions/13166/rs-lmer-cheat-sheet/13173
+* https://stats.stackexchange.com/questions/18428/formula-symbols-for-mixed-model-using-lme4
+
+**But how do you even specify a model like this for other situations?** You need to understand the system (i.e. be a subject matter expert... or very good at talking to them!) This specialist understanding is very important for this class of models... we then use our statistics functions to test our model! 
+
+Right. With that (very brief discussion of a rather technical set of concepts... see the resources at the end of this workbook and on Canvas!) let's try fitting our new model! 
+
+```{r}
+lme.politeness  <-  lmer(frequency  ~  attitude  + gender + (1|subject) + (1|scenario), data=politenessData)
+summary(lme.politeness)
+```
+
+Is our model any good? There is a very nice discussion of interpretation in the tutorial:
+
+- http://www.bodowinter.com/tutorial/bw_LME_tutorial2.pdf 
+
+(This one explicitly works through our example! It also compares this output with other models. Be sure to check it out!)
+
+Look up this resources and the explanations that it provides. Then chat to a person sitting next to you about what this data is saying! Do you both have the same understanding?
+
+##Longitudinal data
+
+One of the places where multilevel models really  excel concerns longitudinal data. So... if we have repeated observations on the same units over time (but not enough data to make use of time series analysis) then a multilevel model may well be a great choice!
+
+This workbook is inspired by the sleepstudy data analysis that is carried out in the documentation for the lme4 package, chapter 4: http://lme4.r-forge.r-project.org/book/Ch4.pdf The analysis there goes into a lot more details than we will cover here, so it is a great place to go if you want to find out more!
+
+We will look at the sleepstudy dataset which is longitudinal. This dataset considers average reaction time per day for subjects in a sleep deprivation study. On day 0 the subjects had their normal amount of sleep. Starting from that night they were restricted to 3 hours of sleep per night. The observations reported in the data represent the average reaction time on a series of tests given each day to each subject.
+
+
+```{r}
+library(lme4)
+str(sleepstudy)
+head(sleepstudy)
+```
+
+How many subjects are there in the sample? And how many days did it go for?
+
+```{r}
+library(ggplot2)
+ggplot(sleepstudy,aes(x=Days,y=Reaction,col=Subject)) + geom_line()
+```
+
+Would it be sensible to fit a linear regression model to all of these data points? What are the reasons for your answer? (The graph below might help you think about this...)
+
+```{r}
+singleLinear<-ggplot(sleepstudy, aes(x = Days, y = Reaction)) + geom_point(color = "blue", alpha = 0.7) + geom_smooth(method = "lm", color = "black")
+singleLinear
+```
+
+
+Note that there is a fair bit of variation in the intercepts for the different subjects... and that there is a similar range in the slopes of the lines that would probably be fit to them. So if we *were* to fit a linear model then we would need to be rather careful... really we want something like this
+
+```{r,fig.width=12,fig.height=12,out.width="1500px"}
+singleLinear + facet_wrap(~Subject)
+```
+
+BUT - really we only have a sample here. And we wish to draw conclusions about typical patterns in the population and the subject-to-subject variability of these patterns (i.e. just fitting a linear model to each subject is not enough!)
+
+Let's fit a linear mixed (i.e. multilevel) model to this data. We  allow  for  the  possibility  that,  for  example, subjects with higher initial reaction times may, on average, be more strongly affected by sleep deprivation. (Which is where we relax the assumptions required by a linear regression model).
+
+We are going to make use of the `lmer` function again to do this. It is not straightforward to use, but fairly powerful. You can find out more details about what mixed effects models are by looking at this more basic tutorial: http://www.bodowinter.com/tutorial/bw_LME_tutorial2.pdf (if you haven't already!) 
+
+```{r}
+fm1 <- lmer(Reaction ~ 1 + Days + (1 + Days|Subject), sleepstudy, REML = 0)
+```
+
+So... this model has tried to model the Response variable (Reaction) with Random-effects terms that can vary according to the grouping factors (Subject). More details can be found in http://lme4.r-forge.r-project.org/book/Ch4.pdf, but you might find this post easier to follow: https://stats.stackexchange.com/questions/18428/formula-symbols-for-mixed-model-using-lme4 (I did ;)
+
+What's in the fit?
+
+```{r}
+fm1
+```
+
+This model incorporates both an intercept and
+a slope (with respect to Days) in the fixed effects and in the random effects. Extracting the conditional modes of the random effects allows us to see what model has been created for each subject in the trial:
+
+```{r}
+ranef(fm1)[["Subject"]]
+```
+
+Thus, there are two random effects for each subject (a slope and an intercept). 
+
+
+####More Information
+
+We are still just scratching the surface here! Here are some links to get you going:
+
+* http://www.bodowinter.com/tutorial/bw_LME_tutorial2.pdf provides an excellent tutorial on how to construct mixed effects models - it should only take you about an hour to work through and you will learn a lot about this important class of models!
+* http://tutorials.iq.harvard.edu/R/Rstatistics/Rstatistics.html#orgheadline36 has a nice tutorial on using the lmer function, which provides datasets and example code in the main directory (http://tutorials.iq.harvard.edu/R/Rstatistics/Rstatistics.html)
+* http://complementarytraining.net/r-playbook-introduction-to-multilevelhierarchical-models/ provides an an alternative example of using this technique for the longitudinal sleep study.
+* http://anythingbutrbitrary.blogspot.com.au/2012/10/hierarchical-linear-models-and-lmer.html provides a good workthrough of lmer and also teaches you ways in which to simulate data!
+* The lme4 book (http://lme4.r-forge.r-project.org/lMMwR/lrgprt.pdf) has a lot of detailed examples as it works through the construction of a variety of different approaches to building up mixed effects models using R. 
+* The EdX MOOC on "Statistical thinking..." (https://courses.edx.org/courses/course-v1:ColumbiaX+DS101X+1T2016/course/) does a very nice job discussing the theory behind hierarchical models in the week 5 case studies. Well worth a watch! 
+
+

@@ -1,0 +1,254 @@
+---
+title: "Bayesian Hierarchical Modelling"
+author: "Leonie Payne, with minor editing by Kirsty Kitto"
+date: "May 26 2018"
+output: 
+  html_notebook: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Note from Kirsty:** This is a notebook that Leonie made in her 2017 iLab! She was working with CSIRO to construct Bayesian hierachical models of sediment flows in rivers that feed into the cachment of the Great Barrier Reef! This was her submission for her professional showcase... (and yes - she has kindly agreed to share it with you all!) Why don't you try contacting her on CIC Around if you want to ask questions?
+
+## Introduction
+This R Markdown on Bayesian Hierarchical Modelling contains an introduction to the theory of Bayesian Hierarchical Modelling, as well as an example demonstrated in RSTAN for the Rat growth model from Gelfand et. al. 1990. It is intended as an Advanced Statistics Module for MDSI students.
+
+## Bayesian Inference
+In this workbook, a knowledge of basic Probability Theory including Bayes Theorem is assumed. If you don't know much about Bayes theorem, then you can find a great intuitive explanation at this site: https://www.countbayesie.com/blog/2015/2/18/bayes-theorem-with-lego (it uses lego!)
+
+Bayesian Inference obtains posterior inferences by combining prior beliefs with the likelihood of the observed data [Dominici et.al 2005]. 
+
+\(P(A|B)=\frac{P(B|A)*P(A)}{P(B)}\qquad\) or, in words... Posterior = \(\frac{\mbox{Likelihood} * \mbox{Prior}}{\mbox{Marginal}}\)
+
+The posterior distribution is a compromise between the prior information and the data. As the sample size of the data increases, the posterior is more heavily weighted towards the data [Gelman et.al. 2014].
+
+To do Bayesian inference we need to follow a particular sequence of steps:  
+
+1. Identify the observed data  
+1. Construct a probabilistic model to represent the data  
+1. Specify our prior distributions  
+1. Collect new data and update the posterior using Bayes’ Rule   
+
+See this page for a nice intuitive workthrough of the process (not using STAN which we will use here which helps to give a better understanding of what is going on "under the hood"): http://tinyheero.github.io/2017/03/08/how-to-bayesian-infer-101.html 
+
+Here we will make use of the powerful STAN package, which is easier to use when constructing a realistic model. 
+
+### Priors
+A prior represents the information that we already have about a system. Priors can be either informative or non informative:  
+
+- Informative priors have been drawn from a population of possible parameter values.  
+- Non informative prior distributions are used when there is no population basis for prior distributions and we want the prior to have minimal influence over the posterior distribution, "to let the data speak for themselves" [p41, Gelman et.al. 2014]. 
+
+Having trouble understanding what that even means? There is a great discussion about Bayesian priors and how they work here: https://www.countbayesie.com/blog/2015/2/18/hans-solo-and-bayesian-priors (It uses our prior knowledge about Hans Solo's "badassness" to update his probability of surviving in very dangerous situations...)
+
+### Sampling from the Posterior Distribution
+Sampling from posterior distributions is achieved using Markov chain Monte Carlo (MCMC) simulations. This method draws values from approximate distributions and subsequently improves the draws to better approximate the target posterior distribution. i.e.  the simulation improves as each step gets closer to converging to the target distribution. It is useful when it is not possible to analytically solve the posterior distribution. The simulation must be run long enough for the distribution to converge to the stationary distribution of the Markov chain. Therefore, checking that the sequence converges is essential in evaluating the software model [Gelman et.al. 2014]. 
+
+## Bayesian Hierarchical Modelling
+When we have individuals that are grouped, it is useful to create a model of hierarchies where the estimation of individual parameters is influenced by and influences the estimation of population parameters. These groupings can be demographic, temporal, spatial. The observed data can be used to describe group level differences for predictors that were not observed. 
+
+Hierarchical Models include both individual and group level variance/uncertainty when estimating group level coefficients. 
+
+If we do not model hierarchically, we expose ourselves to one of two issues, depending upon what we are doing in our modelling technique. 
+
+- *If we pool all groups together* then we ignore the latent or “hidden” differences between groups and also ignores autocorrelation (as the observations are not independent).  
+-	*If we model groups separately* then difficulties arise with small sample sizes, there are more parameters to estimate and the latent (or underlying, hidden) similarity of groups is ignored.   
+
+Hierarchical models use the population distribution to provide structure for dependence in individual parameters, which reduces problems with overfitting data. [University of Connecticut, 2017]
+
+
+## Example: The growth of rats model
+This data is sourced from Gelfand et al (1990). There are 30 new born rats, each weighed weekly for five weeks. This data collection procedure results in \(Y_{ij}\), which is a weight where \(i=\)  rat and \(j =\) week.
+In our analysis, we need to take account of the fact that each rat has its own linear predictor of growth (the individual model) as well as the idea that all rats (grouped) have a population growth line. The compromise hierarchical model is that each rat has its own linear predictor of growth coming from a common distribution where we will be estimating a different slope and intercept for each rat. More details can be found at this tutorial: http://web2.uconn.edu/cyberinfra/module3/Downloads/Day%206%20-%20Hierarchical%20Bayes.pdf
+
+(NB. If you are familiar with mixed models or have learned about the `lme4` package in the multilevel notebook then this should be feeling very familiar...)
+
+### Hierarchical model
+
+We construct the following hierarchical model
+
+    Yij ~ Normal(alphaJ + BetaI(xj - xbar), tauC)
+      alphaI ~ Normal (alphaC, tauA )
+      BetaI ~ Normal (BetaC, tauB)
+
+    In this case alphaC, tauA, BetaC, tauB, tauC are given independent "non informative" priors
+
+    The intercept at time zero (when the is born) is given by:  alpha0 = alphaC - BetaC*xbar
+
+See the tutorial for more details: http://web2.uconn.edu/cyberinfra/module3/Downloads/Day%206%20-%20Hierarchical%20Bayes.pdf
+
+### STAN
+
+STAN is a package that can be used with R, Python, Matlab, Julia, Stata, amongst others. It is designed to apply Bayesian inference to multilevel generalized linear models. It applies Hamiltonian MCMC sampling, a more efficient way of sampling from the posterior distribution than Gibbs sampling.
+
+There is a really supportive STAN community on the internet. Useful sites include:  
+- http://mc-stan.org/users/documentation/  
+- https://github.com/stan-dev/example-models/wiki
+
+STAN follows the convention of programming languages like C++ in the declaration of data types and variables. There are two primitive data types – real for continuous values and int for integers. There are three matrix-based types:   
+
+1. `vector` for column vectors
+1. `row_vector` for row vectors 
+1. `matrix` for matrices. 
+
+There are also arrays and the ability to constrain data types (lower bounds, upper bounds). In the following example, N and T are restricted to positive integers. (Can you work out why  this  is a sensible restriction?)
+
+STAN divides program blocks in the following structure:
+```
+functions {
+  //...function declarations and definitions ...
+}
+
+data {
+  //... declarations ...
+}
+
+transformed data {
+  //... declarations ... statements ...
+}
+
+parameters {
+ //... declarations ...
+}
+
+transformed parameters {
+  //... declarations ... statements ...
+}
+
+model {
+  //... declarations ... statements ...
+}
+
+generated quantities {
+  //... declarations ... statements ...
+}
+```
+- 	The transformed data and transformed parameters sections allow new variables to be declared and defined.  
+-  The variables in the parameters program block are the parameters being sampled by STAN.  
+- Generated quantity variables are defined once per sample. In this rat example, the weight at birth is a generated quantity variable.  
+- The statements in the model section define the probability model.  
+
+You can find out more about this syntax in this reference:  
+
+- Stan Development Team (2017), *Stan Reference Manual*, http://mc-stan.org/users/documentation/, viewed 13th September 2017.
+
+### Rat Growth Code
+
+The parameter estimation for this model is based on the chapter on fitting a hierarchical model in STAN, in the classic text:  
+
+- Gelman et al. (2014) Bayesian Data Analysis 3rd Edition, CRC press. 
+
+The following Rats.stan code is sourced from:
+https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started
+
+It is best practice to save this code in a separate text file (Rats.stan) and call it from the main code. (See below for an example of how this works.)
+
+```
+data {
+  int<lower=0> N;
+  int<lower=0> T;
+  real x[T];   //vector of days measured (over 5 weeks)
+  real y[N,T]; //matrix of measurement T for Rat N
+  real xbar;   //mean number of days
+}
+
+parameters {
+  real alpha[N];
+  real beta[N];
+  real mu_alpha; 	//alpha.c in original bugs model
+  real mu_beta;        // beta.c in original bugs model
+  real<lower=0> sigmasq_y; 	//variance 
+  real<lower=0> sigmasq_alpha;
+  real<lower=0> sigmasq_beta;
+}
+
+transformed parameters {
+  real<lower=0> sigma_y;       // sigma in original bugs model
+  real<lower=0> sigma_alpha;
+  real<lower=0> sigma_beta;
+  sigma_y = sqrt(sigmasq_y); //standard deviation
+  sigma_alpha = sqrt(sigmasq_alpha);
+  sigma_beta = sqrt(sigmasq_beta);
+}
+
+model {
+  mu_alpha ~ normal(0, 100);
+  mu_beta ~ normal(0, 100);
+  sigmasq_y ~ inv_gamma(0.001, 0.001);
+  sigmasq_alpha ~ inv_gamma(0.001, 0.001);
+  sigmasq_beta ~ inv_gamma(0.001, 0.001);
+  alpha ~ normal(mu_alpha, sigma_alpha); // vectorized
+  beta ~ normal(mu_beta, sigma_beta);  // vectorized
+  
+  for (n in 1:N)
+    for (t in 1:T) 
+      y[n,t] ~ normal(alpha[n] + beta[n] * (x[t] - xbar), sigma_y);
+}
+
+generated quantities {
+  real alpha0;
+  alpha0 = mu_alpha - xbar * mu_beta;
+}
+```
+
+The rat growth data is saved in rats.txt (which you can download at https://raw.github.com/wiki/stan-dev/rstan/rats.txt), whilst the STAN code is saved in Rats.stan in the working directory. I have set the seed so we can replicate our findings.
+
+```{r }
+library(rstan)
+set.seed(2001)
+
+y <- as.matrix(read.table('Rats.txt', header = TRUE))
+x <- c(8, 15, 22, 29, 36)
+xbar <- mean(x)
+N <- nrow(y)
+T <- ncol(y)
+
+rats_fit <- stan(file = 'Rats.stan', data=c("x","xbar","N","T", "y"), iter=1000, chains=4)
+
+```
+To display the results numerically we can use the same old print function:
+```{r}
+print(rats_fit)
+```
+We can see that the estimated potential scale reduction factor Rhat is below 1.1 for each parameter estimated, hence our mixing in the Markov chain has been successful. If this was not the case, we could extend the number of iterations for each chain to 2000, and discard the first half of each chain. We will do this below to test out the quality of our fit, (and to demonstrate how to do this!)
+
+First, what does the fit look like? (In the following code, `fits=rats_fit` is the already fit model so STAN doesn't have to compile again. This is a good practice to get into with STAN as it can take a long time for our MCMC chains to converge!)
+```{r}
+plot(rats_fit)
+```
+
+What if we decided we needed to run for more iterations? 
+```{r}
+rats_fit1<-stan(fit=rats_fit, data=c("x","xbar","N","T", "y"), iter=2000, chains=4 )
+print(rats_fit1)
+plot(rats_fit1)
+```
+
+The simulation with the higher sample size will have more stable estimate parameters and lower standard error of the mean.
+
+We can display the histogram of posterior inference for any one of the parameters.
+```{r}
+rats_sim<-extract(rats_fit1, permuted=TRUE)
+hist(rats_sim$alpha)
+hist(rats_sim$alpha0)
+```
+
+Finally, for very beautiful visualisations of both parameters and diagnostics, launch shinystan.
+```{r}
+library(shinystan)
+my_shinystan<-as.shinystan(rats_fit1)
+#launch_shinystan(my_shinystan) # remove the comment at the front of the line if you want to explore this model in Shiny!
+```
+
+
+
+## More information   
+* Dominici, F., & Griswold, M., 2005, Module2; *Bayesian Hierarchical Models*, Hopkins Epi-Biostat Summer Institute.
+* Gelfand, A.E., Hills, S.E., Racine-Poon, A. and Smith, A.F.M. (1990). Illustration of Bayesian inference in normal data models using Gibbs sampling. *Journal of the American Statistical Association* 85, 972-985.
+* Gelman, A., Carlin, J.B., Stern, H.S., Dunson, D.B., Vehtari, A. and Rubin, D.B. (2014), *Bayesian Data Analysis Third Edition*, Chapman and Hall, Florida
+* University of Connecticut Department of Ecology and Evolutionary Biology (2017), http://web2.uconn.edu/cyberinfra/module3/Downloads/Day%206%20-%20Hierarchical%20Bayes.pdf , viewed 16th October 2017.
+* Wolfgang, A. (2017), *Hierarchical Bayesian Modeling – Making scientific inferences about a population based on many individuals*, http://astrostatistics.psu.edu/RLectures/hierarchical.pdf, viewed 18th October 2017. 
+

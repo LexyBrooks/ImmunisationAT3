@@ -1,0 +1,477 @@
+---
+title: "Spatial Analysis"
+author: "Kirsty Kitto"
+date: "May 26 2018"
+output:
+  html_notebook: default
+  html_document: default
+---
+
+Spatial data brings a whole set of new problems with it. A point of particular divergence from our regression models, is brought on by the fact that spatial data is often autocorrelated in the random component. That means that nearby errors are often correlated, and violates one of our core assumptions of regression (about the error terms being independent from one another). We need to adjust our models to account for this problem. 
+
+With spatial data we are often interested in asking questions about things like:
+
+* whether our datapoints are spatially clustered?
+* if two types of event have the same type of spatial distribution? (e.g. two different types of crime, or two different diseases)
+* whether a contagion lies behind an outbreak of a disease? (i.e. is a new case more likely to occur near one of the existing points in a dataset?)
+* is an apparent cluster of accidents just due to the fact that there are lots of people are crossing the road there? 
+
+R has a whole suite of tools for dealing with spatial data. And the visualisation capabilities in particular are very nicely set up. Let's spend a little bit of time looking at mapping before we move onto generating some statistical models for our data. 
+
+If you really want to find out about how to deal with spatial data in R, then this is a great site, full of some lovely tutorials on everything you are likely to want to know: https://data.cdrc.ac.uk/tutorial/an-introduction-to-spatial-data-analysis-and-visualisation-in-r 
+
+I definitely recommend this site! You will need to create an account and log in, but it is definitely worth your while. It has very nice workbooks on Point mapping, kernel smoothing, spatial autocorrelation... almost everything you are likely to know. I have taken a lot of what follows from that site, but this workbook will only be scratching the surface of what is there! (Albeit in one relatively quick to work through workbook as opposed to the 12 Practicals that you will find in that site!)
+
+##Mapping
+
+When we are dealing with spatial data, we can often end up with a number of different types of data and these can be stored in quite complex datatypes. For example, maps often include:
+
+* point data (e.g. specific places where some event occurs)
+* line data (data associated with a line, which we get by joining two points e.g. rivers, roads)
+* polygon data (data associated with an area, e.g. SA2)
+* raster data (data associated with a grid, e.g. latitude and longitude)
+
+The `sp` package is a standard way of dealing with spatial data (stored as objects of type Spatial Polygons). Many packages depend upon it, so it is worth learning about if you are planning to do anything with spatial data. 
+
+Often we will get information about spatial objects (i.e. maps) from what is called an *OGR data source*, which is something that has been constructed according to the Geospatial Data Abstraction Library (GDAL), which is really just a data standard for geospatial data (https://en.wikipedia.org/wiki/GDAL). 
+
+R has some pretty good tools for dealing with this stuff. In particular, the `readOGR()` function in the `rgdal` package, can be used to read in OGR data. Let's load it:
+
+```{r}
+library(sp)
+library(rgdal)
+```
+
+We can use `readOGR` to load up the OGR files that have been made available here: https://data.cdrc.ac.uk/dataset/aa5491c9-cbac-4026-97c9-f9168462f4ac/resource/f8ecc2bc-5313-468d-9653-11f0fd752a7d/download/camdenoa11.zip 
+
+Make sure that you download them now, and move them to the directory where you are running your code! (i.e. the pathname might not work!) Have a look at the files - they should look like this:
+
+*  Camden_oa11.dbf
+*  Camden_oa11.prj
+*  Camden_oa11.shp
+*  Camden_oa11.shx
+
+R knows how to load them all if you specify the path name ("Cambden" for me - I have them in a folder) and the name of the file (i.e. the bit out the front without the filename extension.)
+
+```{r}
+Output.Areas<- readOGR("Camden","Camden_oa11")
+```
+
+Remember to run `?readOGR` to find out more about this function (and the OGR format).
+
+You could look at the structure this map using `str(Output.Areas)` but its REALLY long! I do recommend you examine the structure of this beasty at least once to get a feeling for what is going on in it. Also - beware - the actual data object itself is even longer! (It takes a lot of information to make a map!) Let's just look at the `head` of this data for now
+```{r}
+head(Output.Areas)
+```
+
+Hmmmm... doesn't tell us much ;) you had better explore it in your console (but I am not going to do that here because it will make us all do too much scrolling to get past it).
+
+The weird structure you get occurs because `sp` objects are stored as S4 objects in R. This is a specific object oriented data format, which is quite complex. You can find out more about all of this in this data camp course https://www.datacamp.com/courses/working-with-geospatial-data-in-r (which is quite good! It is definitely worth your while learning about S4 objects in R, and this is a good way to do it.)
+
+Ok... this thing is of class "SpatialPolygonsDataFrame". That is a complex beast! (Try running ?SpatialPolygonsDataFrame to find out a bit more about *them*.) A cool thing about these objects, is that they have a nice handy plot method:
+
+```{r}
+plot(Output.Areas)
+```
+
+Its a map of Cambden! (I guess we should have expected that given that the files are called Cambden_* :| - have a look here if you don't believe me: https://en.wikipedia.org/wiki/London_Borough_of_Camden). 
+
+If you want to find some Australian GIS data then you could try these sites:   
+- http://www.naturalearthdata.com/downloads/   
+- http://openstreetmapdata.com/data 
+
+Ok... so we have our map. What can we do with it? Well... if we had some data then we could join it to our map... Then we could do lots of cool things ;)
+
+Luckily the same site makes census data for the UK available in an easy to use form. You can download it here: https://data.cdrc.ac.uk/dataset/aa5491c9-cbac-4026-97c9-f9168462f4ac/resource/27949d58-8d9b-43b0-b0dd-dfbe47609cbf/download/practicaldata.csv (don't forget to put it in the right place so that R can find it):
+
+```{r}
+Census.Data <-read.csv("practicaldata.csv")
+```
+
+(Have a look a the data! What is in there?)
+
+Ok. How do we join it? We use a `merge` function that comes with the `sp` package:
+
+```{r}
+OA.Census <- merge(Output.Areas, Census.Data, by.x="OA11CD", by.y="OA")
+```
+
+(Make sure you look up what I did there using the helpfile... in particular - can you work out what is going on with those `by.x` and `by.y` options?)
+
+Ok... no errors so it looks like the data merged properly. Now what do we have?
+
+```{r}
+head(OA.Census)
+```
+
+Oooo... it is one of those SPdataframe thingos with 5 variables now (try looking at `OA.Census` and `Output.Areas` in your Environment tab on the right to work out what is different between the two `sp` objects - what has happened?) 
+
+Basically... we have added some data to our map! 5 new variables are now in there about the number of White_Brittish citizens there are in an area, the Low_Occupancy info, how many Unemployed, and their Qualification. Go and look at the site we got the data from to find out more about this dataset (Practical 1 has information about where the data comes from: https://data.cdrc.ac.uk/dataset/aa5491c9-cbac-4026-97c9-f9168462f4ac/resource/09a1093a-74b9-487b-a939-d928f27be612/download/practical1.html). 
+
+Now. Many different coordinate systems are possible. If you are having trouble using GIS data this could well be what is going wrong. Here, we are going to set the coordinate system to the British National Grid (which is the format the data actually came in - we are just making sure, and it is an important thing to learn about):
+
+```{r}
+proj4string(OA.Census) <- CRS("+init=EPSG:27700")
+```
+
+Cool. A really good place to go if you want to learn more about mapping (as well as some of the R S4 classes like SpatialPolygonsDataFrame and how they work!) is this data camp course: https://campus.datacamp.com/courses/working-with-geospatial-data-in-r. 
+Chapters 2 onwards are very nice, and provide a good introduction to the `sp`, `raster` and `rgdal` packages, setting coordinate systems etc. I strongly recommend working through this course if you want to find out more about what we are doing here (we are skimming through!)
+
+Now... we could make our map look nicer. Let's use the `tmap` package, which works quite a bit like ggplot (i.e. it layers the graphics up, so is quite powerful).
+
+```{r}
+library(tmap)
+```
+
+Have a look at `?tm_shape` and `?tm_fill` and you will start working out how it can be used. For a list of all possible functions try `?tmap`. That Data Camp course I mentioned above  (https://campus.datacamp.com/courses/working-with-geospatial-data-in-r) is the place to go if you want to find out more about how `tmap` works. We don't have time to cover it here. 
+
+Let's try using it! What is the spread of Qualifications acorss Camden?
+
+```{r}
+tm_shape(OA.Census) + tm_fill("Qualification") 
+```
+
+Nice - you can find out a lot more about mapping options by working through the rest of Practical 5 on https://data.cdrc.ac.uk/tutorial/an-introduction-to-spatial-data-analysis-and-visualisation-in-r (we are going to move onto more statistical things!)
+
+###More information
+
+We are not going to cover mapping in any more detail - you could easily complete a whole course just in this! For more information you could start with the following two resources (which I have already referred to above!)
+
+* https://www.datacamp.com/courses/working-with-geospatial-data-in-r
+* https://data.cdrc.ac.uk/tutorial/an-introduction-to-spatial-data-analysis-and-visualisation-in-r (Practical 5)
+
+
+##Point Pattern Analysis
+
+So... we have a map. Let's put some more data onto it. The same site makes some point data about house prices available via this link: https://data.cdrc.ac.uk/dataset/aa5491c9-cbac-4026-97c9-f9168462f4ac/resource/24c4f527-43c8-4c09-8558-ad6a48e17de5/download/camdenhousesales15.csv
+
+Let's look at it (make sure you ahve downloaded the data from the site! You will need to log in to access it which is why we are not bothering to read it directly):
+
+```{r}
+houses <- read.csv("CamdenHouseSales15.csv")
+houses
+```
+
+Right-o. We have seen things like this before. Let's quickly plot out what looks like the lattitude/longitude data:
+
+```{r}
+plot(houses$oseast1m, houses$osnrth1m)
+```
+
+Yep - it also looks like Cambden! We can probably just map the two datasets together. If we turn this object (which is just a dataframe) into a SpatialPointsDataFrame (like OA.Census) then we will be able to layer them on one another! We need to be a bit careful about that coordinate frame thing again though (i.e. we need to set it again). 
+
+So. We need to set what the data is to be included (`houses`), what columns contain the x and y coordinates (`houses[,3:4]`), and what projection system we are using (`CRS("+init=EPSG:27700")`).
+
+```{r}
+House.Points <-SpatialPointsDataFrame(houses[,8:9], houses, proj4string = CRS("+init=EPSG:27700"))
+```
+
+Let's print it just to be sure:
+
+```{r}
+House.Points
+```
+
+
+```{r}
+# creates a coloured dot map
+tm_shape(OA.Census) + tm_borders(alpha=.4) +
+tm_shape(House.Points) + tm_dots(col = "Price", palette = "Reds", style = "quantile") 
+```
+
+Alright! That's kind of nice! Again. You can keep going, and adding to this map if you check out Practical 6 of https://data.cdrc.ac.uk/tutorial/an-introduction-to-spatial-data-analysis-and-visualisation-in-r, we are going to move onto Kernel smoothing!
+
+
+
+### Kernel smoothing
+
+
+A point pattern is really just a collection of geographical points, that are assumed to be generated by a random process. Let's imagine the series of points in an $(x,y)$ coordinate system, then we can imagine the vector of $n$ observations:
+${\bf{x}_i}=\{(x_1, y_1), (x_2,y_2)\dots, (x_n,y_n)\}$ for some variable of interest. 
+
+One way to analyse these type of point distributions is to perform kernel smoothing, where you replace each point $x_i$ with a *kernel*, which is just a simple localised function $f({\bf x_i})$ centred on each of our points. We can then and add up all these kernels to get a smooth intensity function, which describes how the distribution of points behaves over space. You could really just think of this as a "bump averaging process". 
+
+To visualise this process, imagine that you have some blotter paper, and you are putting  a dot of ink at each point over your paper. The ink will spread out, with a darker spot in the centre. If you do this for a lot of different dots, then they will start to overlap, getting darker. That is your intensity function!
+
+You need to decide things like what type of kernel function to use, what shape it has etc. but the density function in `spatstat` has some pretty good ones for you to use if you need something different. (This data camp course gives a good introduction: https://campus.datacamp.com/courses/spatial-statistics-in-r/). Here, we are going to use a more modern package that couples very nicely with our tmap object. 
+
+The `kernelUD` function runs a straightforward estimation of our house price data:
+
+```{r}
+library(adehabitatHR)
+# runs the kernel density estimation,look up the function parameters for more options
+kde.output <- kernelUD(House.Points, h="href", grid = 1000)
+plot(kde.output)
+```
+
+Interesting. Can we put it on our map? First we have to convert it to a `raster` object, and set its coordinate system, so that we can then map it onto our previous map:
+
+```{r}
+library(raster)
+#convert our kernel density map to a raster object
+kde <- raster(kde.output)
+# set the coordinate projection of our object to British National Grid (the one we have been using all along)
+projection(kde) <- CRS("+init=EPSG:27700")
+#map it!
+tm_shape(kde) + tm_raster("ud")
+```
+
+We can zoom in to match it to our previous map (if you have forgotten what that was then go back up and remind yourself of what the `Output.Areas` map was!)
+
+```{r}
+masked_kde <- mask(kde, Output.Areas)
+plot(masked_kde) # a quick sanity check!
+```
+(There is normally a good bet that the `plot` function will exist for things of these type, so it is worth a try if you don't know what to do with something... that is pretty much what we did here ;)
+
+Nice! Looks like things are working... Let's neaten it up a bit with some of the functionality built for `tmap`! 
+
+```{r}
+library(tmaptools) # provides a set of tools for processing spatial data
+
+# creates a bounding box based on the extents of the Output.Areas polygon (to make our map smaller)
+bounding_box <- bb(Output.Areas)
+
+# maps the raster within the bounding box
+tm_shape(masked_kde, bbox = bounding_box) + tm_raster("ud")
+```
+
+But if we want to get something nicer still we can keep on fiddling... I will leave it for you to look up all the calls in the help!
+
+```{r}
+tm_shape(masked_kde, bbox = bounding_box) + tm_raster("ud", style = "quantile", n = 100, legend.show = FALSE, palette = "YlGnBu") +
+tm_shape(Output.Areas) + tm_borders(alpha=.3, col = "white") +
+tm_layout(frame = FALSE)
+```
+
+Nice! That tells us a lot about how house prices are changing as we move around in Camden. (Any groups think that kind of thing might be useful? ;)
+
+###More information
+
+* Practical 8 of https://data.cdrc.ac.uk/tutorial/an-introduction-to-spatial-data-analysis-and-visualisation-in-r
+* A very detailed online book: http://www.spatialanalysisonline.com/HTML/index.html?introduction_and_terminology.htm
+* https://campus.datacamp.com/courses/spatial-statistics-in-r/ A data camp course that has some good practice exercises, although I find it a bit longwinded in some of the examples. 
+* Chapter 6 of Brunsdon, C., & Comber, L. (2015). An introduction to R for spatial analysis and mapping. Sage. (Available in library: http://find.lib.uts.edu.au/?R=OPAC_b2914294)
+
+
+##Spatial Attribute Analysis
+
+Quite often we get data in regions (e.g. LGA, SA4 etc.) instead of as a point function. This is so common that there are a whole range of techniques for dealing with it. 
+
+###Spatial Autocorrelaton
+
+Spatial autocorrelation is an extension of temporal autocorrelation (which is covered in the workbook on Time Series). It is a bit more complex though, as spatial objects  have (at least) two dimensions and, like we have seen above, the regions can have complex shapes. This means that it may not be obvious how to determine what is "near", and there are lots of different measures of this (we are just going to consider one, but you will find lots of resources about other methods as you work through this section).
+
+A spatial autocorrelation measures how distance influences a particular variable. Basically, we expect things that are close together to be similar. So for example, a contagious disease is more likely to spread to people who live close to each other, or people tend to cluster together in suburbs with people like them. Can we think of a variable that might do this in our dataset? What about qualifications? You might expect that suburbs with a lot of people with degrees will tend to cluster together perhaps... 
+
+ Let's go back to our map, and adjust it a bit to see if this might be occurring in Camden. 
+
+```{r}
+tm_shape(OA.Census) + tm_fill("Qualification", palette = "Reds", style = "quantile", title = "% with a Qualification") + tm_borders(alpha=.4)  
+```
+
+Looks like this might be happening actually. How could we test whether this is statistically significant though? We will use the `spdep` package to look at spatial autocorrelation. 
+
+```{r}
+library(spdep)
+```
+
+First, we have to find out which polygons in our map are neighbours with one another. We are going to use one particular method here:
+
+```{r}
+neighbours <- poly2nb(OA.Census, queen = FALSE)
+neighbours
+```
+
+By setting `queen = FALSE` we have set up our map to use a definition of neighbours where more than one shared point is required for two  regions to be defined as neighbouring one another. (Look up more options in `?poly2nb` and you can find out a lot more details about this in these slides: http://www.bias-project.org.uk/ASDARcourse/unit6_slides.pdf).
+
+We can plot this list of neighbours on our map
+
+```{r}
+plot(OA.Census, border = 'lightgrey')
+plot(neighbours, coordinates(OA.Census), add=TRUE, col='red')
+```
+
+Ok. Now we can run an autoregression. First we have to convert our neighbours object to the right kind of data object, one that has weights:
+
+```{r}
+listw <- nb2listw(neighbours)
+listw
+```
+
+Compare `listw` and `neighbours`. See that our new list has extra information about weights? We have specified what type of coding scheme we are going to use, that is, how neighbours with no links should be treated etc. See the preliminary details at `?nb2listw`, but if you want to find out more about this process then you could check out slides 23-26 of this set: http://www.bias-project.org.uk/ASDARcourse/unit6_slides.pdf (Lots of other details in here too!)
+
+Ok. We can now run a test for spatial autocorrelation! We are going to use Moran's test, which creates a correlation score between -1 and 1. 
+Have a look at `?moran` to find out more about Moran's I works, but basically it measures spatial autocorrelation based on both feature locations and feature values simultaneously. (See the wikipedia page for a bit more info: https://en.wikipedia.org/wiki/Moran%27s_I) Enough already - lets do the test! Are the regions autocorrelated?
+
+```{r}
+moran.test(OA.Census$Qualification, listw)
+```
+
+Ok. Our p-value is significant and our I statistic is positive (i.e correlated). 
+So the regions seem to be somewhat correlated, as we expected to see from the red image above where we saw that regions with more qualifications tended to cluster together. This page has more details about interpreting Moran's I, athough it is for a different package from R: http://help.arcgis.com/en/arcgisdesktop/10.0/help/index.html#/How_Spatial_Autocorrelation_Global_Moran_s_I_works/005p0000000t000000/
+
+This is what is known as a *global* autocorrelation test. We are looking over the whole map to measure spatial correlation. 
+
+We can also do a local test for autocorrelation. Let's start by looking at how the Qualifications are changing against *spatially* lagged values. 
+If you want to find out more about how this works, then this page is a great place to start: http://rspatial.org/analysis/rst/3-spauto.html
+
+```{r}
+moran <- moran.plot(OA.Census$Qualification, listw = nb2listw(neighbours, style = "W"))
+```
+
+Hmmm... seems like there might be some sort of a positive relationship? There are quite a few outliers, perhaps we can learn a bit more. The `localmoran` function is what we need (check the help file)
+
+```{r}
+local <- localmoran(x = OA.Census$Qualification, listw = nb2listw(neighbours, style = "W"))
+head(local)
+```
+
+Right... so this is producing a whole set of values for each region! We could add this to our shapefile and then we would be able to map it... 
+
+```{r}
+# binds results to our polygon shapefile
+moran.map <- cbind(OA.Census, local)
+
+# maps the results
+tm_shape(moran.map) + tm_fill(col = "Ii", style = "quantile", title = "local moran statistic") 
+```
+
+So this shows us the variations in autocorrelation across space. But are they significant? We could try mapping the p-values the same way. First we need to work out what they are called:
+
+```{r}
+names(moran.map@data)
+```
+
+
+```{r}
+# maps the p-values
+tm_shape(moran.map) + tm_fill(col = "Pr.z...0.", style = "fixed", breaks=c(0.001,0.01,0.05,0.1,0.2,1), title = "p-values") 
+```
+
+Interesting... Can you interpret this? Is it what you expected? (Make sure you look at both the local moran statistics and the p-values in interpreting your results.)
+
+In practice you should really be comparing this to a randomly generated Markov Chain approach. The Data Camp course on https://campus.datacamp.com/courses/spatial-statistics-in-r/ goes into this in a lot of detail. 
+
+####More information
+
+* Practical 9 of https://data.cdrc.ac.uk/tutorial/an-introduction-to-spatial-data-analysis-and-visualisation-in-r is very brief, and does not go into a lot more details than what we have covered. You would do well to use some of the extra resources below as well to find out more. 
+* A nice workbook on spatial autocorrelation http://rspatial.org/analysis/rst/3-spauto.html
+* A whole online book on Geospatial Analysis, which has a section on spatial autocorrelation: http://www.spatialanalysisonline.com/HTML/?spatial_autocorrelation.htm
+* This set of slides goes into a lot more details about the various ways of calculating distance, how the `spdep` functions work etc. Worth checking out if you want to know more: http://www.bias-project.org.uk/ASDARcourse/unit6_slides.pdf
+* https://campus.datacamp.com/courses/spatial-statistics-in-r/
+* Chapter 7 of Brunsdon, C., & Comber, L. (2015). An introduction to R for spatial analysis and mapping. Sage. (Available in library: http://find.lib.uts.edu.au/?R=OPAC_b2914294)
+* A spatial analysis completed by a past STDS student for Assessment 3: https://16-6143.ca.uts.edu.au/spatial-investigation-of-bom-data-assumption-used-in-earlier-asthma-hospiatlisation-investigation/
+
+
+###Geographically Weighted Regression
+
+Ok... final step! Can we work out how to use areas in a regression model? Yes we can! Geographically Weighted Regression (GWR) can be used to identify how regression coefficients may vary across the study area. (So it relaxes assumptions about stationarity for spatial data.)
+
+####Standard linear regression over a geographical dataset
+
+First, let's try running just a normal regression model, that tries to explain Qualifications in terms of the other variables in the census dataset:
+
+```{r}
+lm.model <- lm(OA.Census$Qualification ~ OA.Census$Unemployed+OA.Census$White_British)
+summary(lm.model)
+```
+
+Its not a bad model. Explains 46.5% of the variance, good p-values... what do the residuals look like?
+
+```{r}
+plot(lm.model)
+```
+
+Not brillant, but kind of ok. Is there a spatial distribution to them though? (There should be - we just found it using the spatial autocorrelation stuff!)
+
+```{r}
+resids<-residuals(lm.model)
+
+map.resids <- cbind(OA.Census, resids) 
+# we need to rename the column header from the resids file - in this case its the 6th column of map.resids
+names(map.resids)[6] <- "resids"
+
+# maps the residuals using the quickmap function from tmap
+qtm(map.resids, fill = "resids")
+
+tm_shape(map.resids) + tm_fill("resids") 
+```
+
+Seems like there might be a bit of a spatial dependence there. 
+
+#####GWR
+
+Ok. Can we take account of spatial variables along with our regression model? First we need to work out how to model the kernel. We will use 
+
+```{r}
+library("spgwr")
+
+#calculate kernel bandwidth
+GWRbandwidth <- gwr.sel(OA.Census$Qualification ~ OA.Census$Unemployed+OA.Census$White_British, data=OA.Census,adapt=T)
+```
+
+Ok. Now we can use this value of the bandwidth in our model (don't forget to look up the relevant help pages to find out what we are doing here!)
+
+```{r}
+#fit the gwr model (note it has the same formula as before)
+gwr.model = gwr(OA.Census$Qualification ~ OA.Census$Unemployed+OA.Census$White_British, data = OA.Census, adapt=GWRbandwidth, hatmatrix=TRUE, se.fit=TRUE) 
+
+#OK. What did it do?
+gwr.model
+```
+
+So... what happened? Let's compare a few things. First - what are the components of the models?
+
+```{r}
+names(lm.model)
+names(gwr.model)
+```
+
+What if we look at the coefficients for the global model (i.e. the standard linear regression fit) again?
+
+```{r}
+lm.model$coefficients
+```
+
+How do these compare with the ranges of the intercept and the model coefficients in the summary for gwr.model? What has changed by us running a local regression? They are not completely different, but if we compare the Median values then we see that they have changed a little bit.
+
+This is because in our GWR, we have sets of these intercept and coefficient values for each map region (along with a whole heap of information about the error of the fit at that point) . We can look at them easily if we force the part of the model with the fit.points etc. to a data.frame
+
+```{r}
+results <-as.data.frame(gwr.model$SDF)
+results
+```
+
+Ha. So the coefficients are changing for each council region, along with the intercepts, and some other bits and pieces. 
+
+Just as a by the way... we are using the @ here to refer to a slot in the S4 object that we know is a data.frame (because of the help pages). Here is another way to force out the same information that is probably a bit more familiar:
+
+```{r}
+gwr.model$SDF@data
+```
+
+Exactly the same right? If you want to find out more about S4 functions then you should go and do Chapter 2 of this Data Camp course: https://campus.datacamp.com/courses/working-with-geospatial-data-in-r/ which goes into what `sp` objects are (objects of class S4), what this means, and how they behave in quite a bit of detail. 
+
+If we don't force the `sp` object to a data.frame then we can call its native plot functions
+
+```{r}
+spplot(gwr.model$SDF)
+```
+
+Fancy. We can see how they change. Its a bit slow though. And not really a good idea to compare them like this. However, if we want to then we can map out individual results data again...
+
+```{r}
+gwr.map <- cbind(OA.Census, as.matrix(results))
+tm_shape(gwr.map) + tm_fill("localR2")
+```
+
+If you want to see more about how to render the different bits in comparison graphs that use different scales (which is where the above `plot` call really falls down) then look up `gridExtra`. (See the end of Practical 10 of https://data.cdrc.ac.uk/tutorial/an-introduction-to-spatial-data-analysis-and-visualisation-in-r for a quick introduction to using this very handy package.)
+
+####More information
+
+* Practical 10 of https://data.cdrc.ac.uk/tutorial/an-introduction-to-spatial-data-analysis-and-visualisation-in-r
+* There is a vignette on GWR: `vignette("GWR")` It is not very detailed but does have a list of references where you can find out more about the technique. 
+* http://rspatial.org/analysis/rst/6-local_regression.html
+* There are lots of tutorials and other resources around on GWR. Try this one: https://rpubs.com/chrisbrunsdon/101305, this one: https://rstudio-pubs-static.s3.amazonaws.com/44975_0342ec49f925426fa16ebcdc28210118.html, or these StackExchange pages: https://gis.stackexchange.com/
+
