@@ -1,0 +1,28 @@
+---
+title: "SA3_immune"
+author: "Alex Brooks"
+date: "08/10/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(data.table)
+library(readxl)
+library(dplyr)
+```
+
+```{r}
+sa3_immune <- read.csv("../raw_data/sa3_immune.csv")
+
+sa3_immune$SA3_code <- as.factor(sa3_immune$SA3_code)
+sa3_immune$num_registered <- as.integer(as.character(sa3_immune$num_registered))
+sa3_immune$num_fully_immunised <- as.integer(as.character(sa3_immune$num_fully_immunised))
+sa3_immune$num_not_fully_immunised <- as.integer(as.character(sa3_immune$num_not_fully_immunised))
+sa3_immune$percent_fully_immunised <- as.double(as.character(sa3_immune$percent_fully_immunised))
+
+write.csv(output,"../cleaned_data/sa3_immune.csv", row.names=FALSE)
+
+```
+
