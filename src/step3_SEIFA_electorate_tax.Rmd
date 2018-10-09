@@ -1,0 +1,121 @@
+---
+title: "MergeSEIFandImmunization"
+author: "Alex Brooks"
+date: "30/09/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(data.table)
+library(readxl)
+library(dplyr)
+
+```
+
+```{r}
+seifa <- read.csv("../raw_data/SEIFA_POA_15092018125111153.csv")
+seifa_2016 <- read.csv("../raw_data/ABS_SEIFA2016_POA_26092018193603879.csv")
+```
+
+```{r}
+
+seifa_old = seifa[,c(1,3,5,8,9)]
+
+setDT(seifa_old)   # coerce to data.table
+
+seifa_old_wide = dcast(seifa_old,
+                    POA+Time~INDEX_TYPE+MEASURE,
+                    value.var = c("Value"))
+
+seifa_new = seifa_2016[,c(1,3,5,8,9)]
+
+setDT(seifa_new)   # coerce to data.table
+
+seifa_new_wide <- dcast(seifa_new,
+                        POA+Time~SEIFAINDEXTYPE+SEIFA_MEASURE,
+                        value.var = c("Value"))
+
+```
+
+```{r}
+#Read immunisation data
+immunisation <- read.csv("../cleaned_data/immunisation_data.csv")
+
+immunisation$postcode <- as.factor(immunisation$postcode)
+
+#We have two seifa files one for pre 2016 one for 2016 onwards which we will have to merge.
+immunisation_2015 <- immunisation[immunisation$year <= 2015, ]
+immunisation_2016 <- immunisation[immunisation$year > 2015, ]
+
+```
+
+```{r}
+
+immunisation_seifa_2015 <- merge(immunisation_2015,seifa_old_wide,by.x='postcode',by.y='POA',how='left')
+
+immunisation_seifa_2016 <- merge(immunisation_2016,seifa_new_wide,by.x='postcode',by.y='POA',how='left')
+
+#setdiff(colnames(immunisation_seifa_2016),colnames(immunisation_seifa_2015))
+
+all_immunisation_seifa <- rbind(immunisation_seifa_2016,immunisation_seifa_2015)
+
+all_immunisation_seifa$electorate = NA
+
+```
+
+raw_data/electorates_by_postcode_2016.csv from
+https://www.aph.gov.au/About_Parliament/Parliamentary_Departments/Parliamentary_Library/pubs/rp/rp0304/04rp11table2
+
+```{r}
+
+electorates <- read.csv("../raw_data/electorates_by_postcode_2016.csv")
+
+colnames(electorates) <- c("postcode", "division", "percent")
+electorates$division <- as.character(electorates$division)
+
+#For each row in immunisation data
+for(i in 1:nrow(all_immunisation_seifa)) {
+  #Filter electorate records for rows with a corresponding postcode
+  electorate_list = electorates %>%
+    filter(postcode == all_immunisation_seifa$postcode[i]) %>%
+    arrange(desc(percent))
+  #Get the record with the highest ratio and add its electorate for the immunisation_data record
+  all_immunisation_seifa$electorate[i] = electorate_list$division[1]
+}
+
+```
+
+```{r}
+#Add taxation data
+
+tax_2016 <- read.csv("../raw_data/tax_2016.csv")
+tax_2015 <- read.csv("../raw_data/tax_2015.csv")
+tax_2014 <- read.csv("../raw_data/tax_2014.csv")
+tax_2013 <- read.csv("../raw_data/tax_2013.csv")
+tax_2012 <- read.csv("../raw_data/tax_2012.csv")
+tax_2011 <- read.csv("../raw_data/tax_2011.csv")
+
+imm_2016 <- filter(all_immunisation_seifa, year == 2016)
+imm_2015 <- filter(all_immunisation_seifa, year == 2015)
+imm_2014 <- filter(all_immunisation_seifa, year == 2014)
+imm_2013 <- filter(all_immunisation_seifa, year == 2013)
+imm_2012 <- filter(all_immunisation_seifa, year == 2012)
+imm_2011 <- filter(all_immunisation_seifa, year == 2011)
+
+combine.2016 <- merge(imm_2016, tax_2016, by.x='postcode', by.y='postcode', all.x = TRUE)
+combine.2015 <- merge(imm_2015, tax_2015, by.x='postcode', by.y='postcode', all.x = TRUE)
+combine.2014 <- merge(imm_2014, tax_2014, by.x='postcode', by.y='postcode', all.x = TRUE)
+combine.2013 <- merge(imm_2013, tax_2013, by.x='postcode', by.y='postcode', all.x = TRUE)
+combine.2012 <- merge(imm_2012, tax_2012, by.x='postcode', by.y='postcode', all.x = TRUE)
+combine.2011 <- merge(imm_2011, tax_2011, by.x='postcode', by.y='postcode', all.x = TRUE)
+
+total.combined <- rbind(combine.2016, combine.2015, combine.2014, combine.2013, combine.2012, combine.2011)
+
+#Write this to a file
+write.csv(total.combined,"../cleaned_data/all_immunisation_seifa.csv", row.names=FALSE)
+
+```
+
+

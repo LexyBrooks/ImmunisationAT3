@@ -24,5 +24,7 @@ sa3_immune$percent_fully_immunised <- as.double(as.character(sa3_immune$percent_
 
 write.csv(output,"../cleaned_data/sa3_immune.csv", row.names=FALSE)
 
+testes <- read.csv("../cleaned_data/sa3_immune.csv")
+
 ```
 
