@@ -1,0 +1,142 @@
+---
+title: "SA3_immune"
+author: "Alex Brooks"
+date: "08/10/2018"
+output: html_document
+---
+# New data merge for AT3
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(data.table)
+library(readxl)
+library(dplyr)
+```
+
+```{r}
+sa3_immune <- read.csv("../raw_data/sa3_immune.csv")
+
+sa3_immune$SA3_code <- as.factor(sa3_immune$SA3_code)
+sa3_immune$num_registered <- as.integer(as.character(sa3_immune$num_registered))
+sa3_immune$num_fully_immunised <- as.integer(as.character(sa3_immune$num_fully_immunised))
+sa3_immune$num_not_fully_immunised <- as.integer(as.character(sa3_immune$num_not_fully_immunised))
+sa3_immune$percent_fully_immunised <- as.double(as.character(sa3_immune$percent_fully_immunised))
+
+write.csv(output,"../cleaned_data/sa3_immune.csv", row.names=FALSE)
+
+```
+```{r}
+sa3_immune <- read.csv("../raw_data/sa3_immune.csv")
+
+sa3_immune$SA3_code <- as.factor(sa3_immune$SA3_code)
+sa3_immune$num_registered <- as.integer(as.character(sa3_immune$num_registered))
+sa3_immune$num_fully_immunised <- as.integer(as.character(sa3_immune$num_fully_immunised))
+sa3_immune$num_not_fully_immunised <- as.integer(as.character(sa3_immune$num_not_fully_immunised))
+sa3_immune$percent_fully_immunised <- as.double(as.character(sa3_immune$percent_fully_immunised))
+
+write.csv(output,"../cleaned_data/sa3_immune.csv", row.names=FALSE)
+
+```
+
+#Bring in Innovation data at SA3 level, which has 2011, 2012, 2013, 2014 and 2015 (but not 2016 data)
+
+```{r}
+sa3_innov <- read.csv("../raw_data/sa3_innovation.csv")
+str(sa3_innov)
+```
+
+
+
+
+```{r}
+# Clean raw immunisation data using function 
+
+# Parameters
+# * imm_data - the source data frame we want to clean
+
+# Returns - a data frame
+
+clean_immunisation_data <- function(imm_data) {
+  #Select only the columns we need
+  imm_clean = imm_data %>%
+    select('State', 'Postcode', 'Reporting Year', 'Age group', 'Percent fully immunised (%)', 'Interpret with caution  (#)')
+  
+  #Rename column names to State, Postcode, Year, Age, pc_immun and caution
+  imm_clean = rename(imm_clean, postcode = "Postcode", state = "State", year = 'Reporting Year', age = 'Age group', pc_immun ='Percent fully immunised (%)', caution = 'Interpret with caution  (#)')
+  
+  #Age has an unnecessary " year" in text at the end of each entry. Remove everything after the first space so we can treat age as a number, rather than character. 
+  imm_clean$age = sub(" .*", "", imm_clean$age)
+  #Convert Age to integer
+  imm_clean$age = as.integer(imm_clean$age)
+  
+  #Year is poorly formatted with either '2016-2017' format or '2016 <d0> 2017' format. Just take the first 4 characters to represent year.
+  imm_clean$year = substr(imm_clean$year, 1, 4)
+  #Convert Year to integer format
+  imm_clean$year = as.integer(imm_clean$year)
+  
+  #Replace caution values, so # becomes 1 and NA becomes 0. 
+  imm_clean$caution[is.na(imm_clean$caution)] <- 0
+  imm_clean$caution[imm_clean$caution == "#"] <- 1
+  #Convert caution to integer format
+  imm_clean$caution = as.integer(imm_clean$caution)
+  
+  #If there are empty rows (determined by rows without a postcode), remove them
+  imm_clean = subset(imm_clean, !is.na(imm_clean$postcode))
+  
+  #Look at the unique state names.
+  imm_states = imm_clean %>%
+    group_by(state) %>%
+    summarize(mean_age = mean(age, na.rm = TRUE)) %>%
+    select(state)
+  
+  #There's some values that mean the same but are typed differently (duplicates). Let's clean those up
+  
+  #First, replace any whitespace characters in state names to reduce mistyped names. 
+  imm_clean$state = gsub("[[:blank:]]","", imm_clean$state)
+  
+  #Fix up a couple of synonyms
+  imm_clean$state[imm_clean$state == "ACT/NSW"] <- "NSW/ACT"
+  imm_clean$state[imm_clean$state == "NT/SA/WA"] <- "SA/WA/NT"
+  
+  #Look at the unique state names again. That's better.
+  imm_states = imm_clean %>%
+    group_by(state) %>%
+    summarize(mean_age = mean(age, na.rm = TRUE)) %>%
+    select(state)
+  
+  return(imm_clean)
+  
+}
+```
+
+```{r}
+# Create class numbers for immunisation perecentage groupings
+# * We need to transform percent fully immunised into an extended dummy variable "Immun_class" of 9 different classses (including one for no percentage or 'NP').
+# * 0 = NP, 1 = < 70%, 2 = Between 70-74.9%, 3 = Between 75-79.9%, 4 = Between 80-84.9%, 5 = Between 85-89.9%, 6 = Between 90-92.4%, 7 = Between 92.5-94.9%, 8 = 95-100%
+# * Make a data frame that assigns a number to each range of percent fully immunised
+
+# Parameters
+# * imm_data - the source data frame we want to get the percent fully immunised ranges from
+
+# Returns - a data frame
+
+immunisation_groups <- function(imm_data) {
+  #Group the data by pc_immun value to get a list of unique pc_immun values.
+  #Age mean is just used as a summartize and get the unique pc_immun values, it is not a valid figure and will be discarded.
+  #Select only pm_immun column and order by pc_immun in ascending order
+  imm_grp <- imm_data %>%
+    group_by(pc_immun) %>%
+    summarize(mean_age = mean(age, na.rm = TRUE)) %>%
+    select(pc_immun) %>%
+    arrange(pc_immun)
+  
+  #Add a column of integers to respresent the pc_immun group
+  imm_grp$Immun_class <- c(1:nrow(imm_grp))
+  #Change the 'NP' Immun_class to 0
+  imm_grp$Immun_class[imm_grp$pc_immun == "NP"] <- 0
+  
+  return(imm_grp)
+  
+}
+
+```
