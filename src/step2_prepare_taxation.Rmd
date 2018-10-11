@@ -31,7 +31,7 @@ tax_2016 <- tax_2016 %>%
 tax_2016 <- tax_2016 %>%
   group_by(postcode) %>%
   summarise(total_tax = sum(total_tax),num_individuals = sum(num_individuals)) %>%
-  mutate(mean_tax = ceiling(total_tax/num_individuals)) %>%
+  mutate(mean_tax_000s = (ceiling(total_tax/num_individuals))/1000) %>%
   mutate(year = "2016")
 
 tax_2016$total_tax <- as.numeric(tax_2016$total_tax)
@@ -58,7 +58,7 @@ tax_2015 <- tax_2015 %>%
 tax_2015 <- tax_2015 %>%
   group_by(postcode) %>%
   summarise(total_tax = sum(total_tax),num_individuals = sum(num_individuals)) %>%
-  mutate(mean_tax = ceiling(total_tax/num_individuals)) %>%
+  mutate(mean_tax_000s = (ceiling(total_tax/num_individuals))/1000) %>%
   mutate(year = "2015")
 
 tax_2015$total_tax <- as.numeric(tax_2015$total_tax)
@@ -85,7 +85,7 @@ tax_2014 <- tax_2014 %>%
 tax_2014 <- tax_2014 %>%
   group_by(postcode) %>%
   summarise(total_tax = sum(total_tax),num_individuals = sum(num_individuals)) %>%
-  mutate(mean_tax = ceiling(total_tax/num_individuals)) %>%
+  mutate(mean_tax_000s = (ceiling(total_tax/num_individuals))/1000) %>%
   mutate(year = "2014")
 
 tax_2014$total_tax <- as.numeric(tax_2014$total_tax)
@@ -112,7 +112,7 @@ tax_2013 <- tax_2013 %>%
 tax_2013 <- tax_2013 %>%
   group_by(postcode) %>%
   summarise(total_tax = sum(total_tax),num_individuals = sum(num_individuals)) %>%
-  mutate(mean_tax = ceiling(total_tax/num_individuals)) %>%
+  mutate(mean_tax_000s = (ceiling(total_tax/num_individuals))/1000) %>%
   mutate(year = "2013")
 
 tax_2013$total_tax <- as.numeric(tax_2013$total_tax)
@@ -139,7 +139,7 @@ tax_2012 <- tax_2012 %>%
 tax_2012 <- tax_2012 %>%
   group_by(postcode) %>%
   summarise(total_tax = sum(total_tax),num_individuals = sum(num_individuals)) %>%
-  mutate(mean_tax = ceiling(total_tax/num_individuals)) %>%
+  mutate(mean_tax_000s = (ceiling(total_tax/num_individuals))/1000) %>%
   mutate(year = "2012")
 
 tax_2012$total_tax <- as.numeric(tax_2012$total_tax)
