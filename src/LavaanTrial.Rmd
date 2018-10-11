@@ -44,9 +44,11 @@ str(Data)
 
 #Latent variable is immun_class - let's try a single factor model
 #latent variable i s pc immun in this experiment
-imm.model <- 'pc_immun_class =~ mean_tax_000s+IRSD_SCORE+IRSAD_SCORE+IER_SCORE+IEO_SCORE+political_score'
+
+data_year <- filter(Data, year == 2016 & age == 1)
+imm.model <- 'pc_immun_class =~ political_score+mean_tax_000s+IER_SCORE+IEO_SCORE'
 imm.fit <- cfa(model=imm.model,
-                  data = Data)
+                  data = data_year)
 summary(imm.fit, standardized = TRUE, fit.measures = TRUE)
   
 ```
