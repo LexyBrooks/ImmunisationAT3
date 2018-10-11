@@ -44,7 +44,7 @@ str(Data)
 
 #Latent variable is immun_class - let's try a single factor model
 #latent variable i s pc immun in this experiment
-imm.model <- 'pc_immun_class =~ mean_tax_000s+IRSD_SCORE+IRSAD_SCORE+IER_SCORE+IEO_SCORE+PHN_number'
+imm.model <- 'pc_immun_class =~ mean_tax_000s+IRSD_SCORE+IRSAD_SCORE+IER_SCORE+IEO_SCORE+political_score'
 imm.fit <- cfa(model=imm.model,
                   data = Data)
 summary(imm.fit, standardized = TRUE, fit.measures = TRUE)
@@ -53,11 +53,11 @@ summary(imm.fit, standardized = TRUE, fit.measures = TRUE)
 #the single factor model is very poor fitting
 Let's try some different variables and see how it comes together
 ```{r}
-imm.model2 <- 'pc_immun_class =~ mean_tax+PHN_number+age
+imm.model2 <- 'pc_immun_class =~ mean_tax_000s+PHN_number+age
 age =~ IRSD_MAXS+IRSD_MINS+IRSAD_MAXS+IRSAD_MINS+IER_MAXS+IER_MINS+IEO_MAXS+IEO_MINS'
 imm.fit2 <- cfa(model=imm.model2,
                   data = Data)
-summary(imm.fit2, standardized = TRUE, fit.measures = TRUE mse = TRUE)
+summary(imm.fit2, standardized = TRUE, fit.measures = TRUE)
   
 ```
 ```{r}

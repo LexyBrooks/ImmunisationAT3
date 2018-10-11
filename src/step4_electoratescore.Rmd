@@ -41,32 +41,32 @@ master_data_2011 <- filter(master_data, year == 2011)
 pol_score_2016 <- pol_score %>%
     select(postcode, X2016_score) %>%
     group_by(postcode) %>%
-    summarize(political_score = mean(X2016_score))
+    summarize(political_score = (mean(X2016_score)*10))
 
 pol_score_2015 <- pol_score %>%
     select(postcode, X2015_score) %>%
     group_by(postcode) %>%
-    summarize(political_score = mean(X2015_score))
+    summarize(political_score = (mean(X2015_score)*10))
 
 pol_score_2014 <- pol_score %>%
     select(postcode, X2014_score) %>%
     group_by(postcode) %>%
-    summarize(political_score = mean(X2014_score))
+    summarize(political_score = (mean(X2014_score)*10))
 
 pol_score_2013 <- pol_score %>%
     select(postcode, X2013_score) %>%
     group_by(postcode) %>%
-    summarize(political_score = mean(X2013_score))
+    summarize(political_score = (mean(X2013_score)*10))
 
 pol_score_2012 <- pol_score %>%
     select(postcode, X2012_score) %>%
     group_by(postcode) %>%
-    summarize(political_score = mean(X2012_score))
+    summarize(political_score = (mean(X2012_score)*10))
 
 pol_score_2011 <- pol_score %>%
     select(postcode, X2011_score) %>%
     group_by(postcode) %>%
-    summarize(political_score = mean(X2011_score))
+    summarize(political_score = (mean(X2011_score)*10))
 ```
 
 ## Joining data
