@@ -15,7 +15,7 @@ library(tidyverse)
 ```
 
 ```{r}
-sa3_immune <- read.csv("../cleaned_data/sa3_immune.csv")
+sa3_immune <- read.csv("../raw_data/sa3_immune.csv")
 sa3_innov <- read.csv("../raw_data/sa3_innovation.csv")
 str(sa3_innov)
 str(sa3_immune)

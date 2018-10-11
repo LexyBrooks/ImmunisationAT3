@@ -57,8 +57,6 @@ immunisation_seifa_2015 <- merge(immunisation_2015,seifa_old_wide,by.x='postcode
 
 immunisation_seifa_2016 <- merge(immunisation_2016,seifa_new_wide,by.x='postcode',by.y='POA',how='left')
 
-#setdiff(colnames(immunisation_seifa_2016),colnames(immunisation_seifa_2015))
-
 all_immunisation_seifa <- rbind(immunisation_seifa_2016,immunisation_seifa_2015)
 
 all_immunisation_seifa$electorate = NA
@@ -90,7 +88,6 @@ for(i in 1:nrow(all_immunisation_seifa)) {
 ```{r}
 #Add taxation data
 
-tax_2016 <- read.csv("../raw_data/tax_2016.csv")
 tax_2015 <- read.csv("../raw_data/tax_2015.csv")
 tax_2014 <- read.csv("../raw_data/tax_2014.csv")
 tax_2013 <- read.csv("../raw_data/tax_2013.csv")
@@ -104,7 +101,9 @@ imm_2013 <- filter(all_immunisation_seifa, year == 2013)
 imm_2012 <- filter(all_immunisation_seifa, year == 2012)
 imm_2011 <- filter(all_immunisation_seifa, year == 2011)
 
-combine.2016 <- merge(imm_2016, tax_2016, by.x='postcode', by.y='postcode', all.x = TRUE)
+#No 2016 tax data, so using 2015 for 2016
+
+combine.2016 <- merge(imm_2016, tax_2015, by.x='postcode', by.y='postcode', all.x = TRUE)
 combine.2015 <- merge(imm_2015, tax_2015, by.x='postcode', by.y='postcode', all.x = TRUE)
 combine.2014 <- merge(imm_2014, tax_2014, by.x='postcode', by.y='postcode', all.x = TRUE)
 combine.2013 <- merge(imm_2013, tax_2013, by.x='postcode', by.y='postcode', all.x = TRUE)

@@ -18,69 +18,75 @@ library(purrr)
  
 
 ```{r}
-Step3 <- read.csv("../cleaned_data/all_immunisation_seifa.csv")
-Scoredata <-read.csv("../raw_data/Transformed_elec.csv")
-str(Scoredata)
+master_data <- read.csv("../cleaned_data/all_immunisation_seifa.csv")
+pol_score <- read.csv("../raw_data/Transformed_elec.csv")
+
 ```
 
 ```{r}
-#The score data needs to be merged year by year
+#Get the master data for each year
+
+master_data_2016 <- filter(master_data, year == 2016)
+master_data_2015 <- filter(master_data, year == 2015)
+master_data_2014 <- filter(master_data, year == 2014)
+master_data_2013 <- filter(master_data, year == 2013)
+master_data_2012 <- filter(master_data, year == 2012)
+master_data_2011 <- filter(master_data, year == 2011)
  
-  
 ```
+
+```{r}
+#Get the political score for each year
+
+pol_score_2016 <- pol_score %>%
+    select(postcode, X2016_score) %>%
+    group_by(postcode) %>%
+    summarize(political_score = mean(X2016_score))
+
+pol_score_2015 <- pol_score %>%
+    select(postcode, X2015_score) %>%
+    group_by(postcode) %>%
+    summarize(political_score = mean(X2015_score))
+
+pol_score_2014 <- pol_score %>%
+    select(postcode, X2014_score) %>%
+    group_by(postcode) %>%
+    summarize(political_score = mean(X2014_score))
+
+pol_score_2013 <- pol_score %>%
+    select(postcode, X2013_score) %>%
+    group_by(postcode) %>%
+    summarize(political_score = mean(X2013_score))
+
+pol_score_2012 <- pol_score %>%
+    select(postcode, X2012_score) %>%
+    group_by(postcode) %>%
+    summarize(political_score = mean(X2012_score))
+
+pol_score_2011 <- pol_score %>%
+    select(postcode, X2011_score) %>%
+    group_by(postcode) %>%
+    summarize(political_score = mean(X2011_score))
+```
+
 ## Joining data
-The tax data is actually all a year behind - so 2016 is actually 2015-16, 2015 is actually 2014-15 etc, which doesn't match the years in the postcode data.
 
-Relations are always defined by a pair of tables - the property of the relations between each pair.
-MUTATING: add new variables to one data frame from matching observations in another
-FILTERING JOINS: filter observations from one df based on whether or not that maych an observation in the other table
-SET OPERATIONS: treat observations as if they were set elements
+```{r}
 
+combine.2016 <- merge(master_data_2016, pol_score_2016, by.x='postcode', by.y='postcode', all.x = TRUE)
+combine.2015 <- merge(master_data_2015, pol_score_2015, by.x='postcode', by.y='postcode', all.x = TRUE)
+combine.2014 <- merge(master_data_2014, pol_score_2014, by.x='postcode', by.y='postcode', all.x = TRUE)
+combine.2013 <- merge(master_data_2013, pol_score_2013, by.x='postcode', by.y='postcode', all.x = TRUE)
+combine.2012 <- merge(master_data_2012, pol_score_2012, by.x='postcode', by.y='postcode', all.x = TRUE)
+combine.2011 <- merge(master_data_2011, pol_score_2011, by.x='postcode', by.y='postcode', all.x = TRUE)
 
-```{r, fig.width=12, fig.height=15}
-(fjsp <- full_join(Step3, Scoredata))
 ```
 
 ```{r}
-str(fjsp)
+total.combined <- rbind(combine.2016, combine.2015, combine.2014, combine.2013, combine.2012, combine.2011)
+
+write.csv(total.combined,"../cleaned_data/all_immunisation_seifa.csv", row.names=FALSE)
 ```
 
 
-
-#write to a clean data file
-```{r}
-#Write this to a file
-write.csv(fjsp,"../cleaned_data/all_immunisation_elecscore.csv")
-
-```
-
-#let's look at the extra tax data
-```{r}
-taxdata <- read.csv("../raw_data/Tax2016_transformed.csv")
-str(taxdata)
-```
-#clean this dtaa as they are all appearing as factors when should be numbers
-```{r}
-#transform factors to numbers
-tax_individuals <- as.integer(taxdata$tax_individuals)
-medicare_levy_surcharge_num <- as.integer(taxdata$medicare_levy_surcharge_num)
-tax_on_taxable_income_num <- as.integer(taxdata$tax_on_taxable_income_num)
-govt_allow_payments_num <- as.integer(taxdata$govt_allow_payments_num)
-govt_pensions_allow_num <- as.integer(taxdata$govt_pensions_allow_num)
-gifts_num <- as.integer(taxdata$gifts_num)
-private_health_num <- as.integer(taxdata$private_health_num)
-received_rebate_num <-as.integer(taxdata$received_rebate_num)
-str(taxdata)
-```
-
-
-
-# the interesting variables are the numbers of people in each postcode, these manifest variables could indicate the latent variables
-- tax_individuals - the number of people paying tax in the postcode
-- medicare_levy_surcharge_num
-- tax_on_taxable_income_num
-- govt_allow_payments_num
-- govt_pensions_allow_num
-- gifts_num
-- private_health_num
 
