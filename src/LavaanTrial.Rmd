@@ -82,6 +82,32 @@ imm.fit5 <- cfa(model=imm.model5,
                   data = Data)
 summary(imm.fit5, standardized = TRUE, fit.measures = TRUE)
 ```
+```{r}
+#bring in new data
+newdata <- read.csv('../cleaned_data/all_immunisation_elecscore.csv')
+str(newdata)
+```
+##let's try a model with the elec scores against the latent variable of pc_immun_class - will have to include years in some way too??? TALK TO ANT ABOUT YEARS???
+
+```{r}
+elec.model <- 'pc_immun_class =~ year+X2016_score+X2015_score+X2014_score+X2013_score+X2012_score+X2011_score'
+elec.fit <- cfa(model=elec.model,
+                  data = newdata)
+summary(elec.fit, standardized = TRUE, fit.measures = TRUE)
+  #cos the election scores have a linear relationship, the model can't happen
+```
+```{r}
+#try it just for 2016
+elec.model2 <- 'pc_immun_class =~mean_tax+X2016_score+year+ IRSD_MAXS+IRSD_MINS+IRSAD_MAXS+IRSAD_MINS+IER_MAXS+IER_MINS+IEO_MAXS+IEO_MINS+ IRSD_SCORE+IRSAD_SCORE+IER_SCORE+IEO_SCORE'
+elec.fit2 <- cfa(model=elec.model2,
+                  data = newdata)
+summary(elec.fit2, standardized = TRUE, fit.measures = TRUE)
+  
+```
+
+
+```{r}
+elec.model2 <- 'pc_immun_class =~ _score+IRSD_SCORE+IRSAD_SCORE+IER_SCORE+IEO_SCORE+IRSD_URP+IRSAD_URP+IER_URP+IEO_URP
 ##Selecting variables for SEM 
 I need to transform mean_tax in some way to be relative to the other numbers??? Not sure how to do that
 
@@ -189,3 +215,8 @@ twofactor.model <- 'visual =~ x1 + x2 + x3
   P-value (Chi-square)                           0.000
     
     Both latent variables and 6 manifeset variables.
+  
+  
+  #lavaan by default makes manifest variables covariance checks
+  
+  
