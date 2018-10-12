@@ -1,0 +1,226 @@
+---
+title: "At3modelling"
+author: "Alex Brooks"
+date: "10/12/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(lavaan)
+library(semPlot)
+options (scipen = 999)
+library(dplyr)
+library(caret)
+```
+
+## Using Structural Equation Modelling to explore vaccination data
+
+In AT2, The Vaccinators made the assumption that vaccination coverage rates (as measured by the Australian Institute for Health and Welfare at postcode level) were influenced by a range of geographical and socio-economic indicators (as measured by the four SEIFA indexes held by the ABS).
+We suspected qualitative measures such as search demand and news stories on anti-vax and vaccination topics influenced the rate of "trust" people had in vaccines and immunisation - and we tried to measure and model this, but could not. Other factors like government spending, and harsher public policy measures like No Jab, No Play - which banned conscientious objection to vaccination - were also at play but hard to measure.
+
+We had hypothesised that political affiliation may also influence vaccination rates, but when looking at federal electorates and vaccination rates, found this not to be true, with many different political affiliations demonstrating both high and low immunisation coverage rates, in no identifiable pattern.
+Our analysis in AT2 fell apart due to the high volume of Not Published postcode level data in the year 2016, and in this new assignment, I plan to:
+- explore the class of immunisation coverage as a latent variable, manifested by our data variables of:
+- mean tax paid at postcode level, measured by ATO statistics
+- SEIFA scores by postcode
+- age of child at immunisation coverage measurement
+- Primary Health Network area
+
+
+I chose SEM because it helps to model the causal questions which initially attracted me to this topic, and I wanted to see if I could use data once and for all to rule out - or rule in - our hypothesis that:
+1. Sentiment has a relationship with vaccination coverage rates
+2. That immunisation coverage is influenced by SEIFA and mean tax and political affiliation.
+ 
+
+```{r}
+#Let's start with a simple one factor SEM 
+ 
+Data <-read.csv('../cleaned_data/all_immunisation_seifa.csv')
+str(Data)
+```
+##Let's first check out the spread and variance of the features using caret
+```{r}
+set.seed(7)
+# load the library
+library(mlbench)
+library(caret)
+# load the data
+data(Data)
+# calculate correlation matrix
+correlationMatrix <- cor(Data[,1:54])
+# summarize the correlation matrix
+print(correlationMatrix)
+# find attributes that are highly corrected (ideally >0.75)
+highlyCorrelated <- findCorrelation(correlationMatrix, cutoff=0.5)
+# print indexes of highly correlated attributes
+print(highlyCorrelated)
+```
+##try to assess feature importance
+```{r}
+# ensure results are repeatable
+set.seed(7)
+# load the library
+library(mlbench)
+library(caret)
+# load the dataset
+data(Data)
+# prepare training scheme
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+# train the model
+model <- train(pc_immun_class~., data=Data, method="lvq", preProcess="scale", trControl=control)
+# estimate variable importance
+importance <- varImp(model, scale=FALSE)
+# summarize importance
+print(importance)
+# plot importance
+plot(importance)
+```
+
+
+## Let's start with some simple modelling
+ 
+
+```{r}
+#latent variable i s pc immun in this experiment
+imm.model <- 'pc_immun_class =~ mean_tax_000s+IRSD_SCORE+IRSAD_SCORE+IER_SCORE+IEO_SCORE'
+imm.fit <- cfa(model=imm.model,
+                  data = Data)
+summary(imm.fit, standardized = TRUE, fit.measures = TRUE)
+
+```
+```{r}
+#plot it
+lavInspect(imm.fit, what="estimates")
+```
+```{r}
+semPaths(imm.fit,  what = "stand", rotation = 4)
+```
+
+```{r}
+#plot of model 1
+semPaths(object = imm.fit,
+          whatLabels = "std", 
+          edge.label.cex = 1.5, 
+          layout = "tree", rotation = 4)
+```
+```{r}
+modificationindices(imm.fit, sort = TRUE)
+```
+```{r}
+imm.model <- 'pc_immun_class =~ mean_tax_000s+IRSD_SCORE+IRSAD_SCORE+IER_SCORE+IEO_SCORE'
+
+#let's see if sentiment can be created on its own
+imm.model2 <- 'sentiment =~ pc_immun_clas s+ mean_tax_000s+age+year+political_score+ IRSD_SCORE+IRSAD_SCORE+IER_SCORE+IEO_SCORE+PHN_number'
+imm.fit2 <- cfa(model=imm.model2,
+                  data = Data)
+summary(imm.fit2, standardized = TRUE, fit.measures = TRUE)
+
+```
+
+```{r}
+#plot of model 2
+semPaths(object = imm.fit2,
+          whatLabels = "std", 
+          edge.label.cex = 1.5, 
+          layout = "tree", rotation = 4)
+```
+
+#Not perfect, but OK for now
+```{r}
+#try two factor
+twofactorimm.model <- 'socio =~ age + year+ pc_immun_class + postcode + IRSAD_URP
+    sentiment =~ political_score + mean_tax_000s + IER_SCORE
+socio~~sentiment'
+twofactorimm.fit <- cfa(model = twofactorimm.model,
+                     data = Data)
+summary(twofactorimm.fit, standardized = TRUE, fit.measures = TRUE)
+#covariance warning 
+```
+```{r}
+semPaths(object = twofactorimm.model,
+          whatLabels = "std", 
+          edge.label.cex = 1.5, 
+          layout = "tree", rotation = 4)
+```
+
+#Not perfect, but OK for now
+```{r}
+#try three factor
+threefactorimm.model <- 'immun =~ postcode + PHN_number + pc_immun_class + year + age 
+    sentiment =~ political_score + mean_tax_000s + pc_immun_class
+socio =~ IRSD_SCORE+IRSAD_SCORE+IER_SCORE+IEO_SCORE'
+threefactorimm.fit <- cfa(model = threefactorimm.model,
+                     data = Data)
+summary(threefactorimm.fit, standardized = TRUE, fit.measures = TRUE)
+ 
+```
+
+```{r}
+semPaths(object = threefactorimm.model,
+          whatLabels = "std", 
+          edge.label.cex = 1.5, 
+          layout = "tree", rotation = 4)
+```
+###NEed to redo datacamp to check the
+two factor models can have a correlation between latent variables - lavaan does this by default - latent variables thought to predict the scores on manifest variables. We can use latent variables to predict each other.
+
+EG
+twofactor.model <- 'visual =~ x1 + x2 + x3
+    speed =~ x7 + x8 + x9'
+twofactor.fit <- cfa(model = twofactor.model,
+                     data = HolzingerSwineford1939)
+summary(twofactor.fit, standardized = TRUE, fit.measures = TRUE)
+OUTPUT
+Latent Variables:
+                   Estimate  Std.Err  z-value  P(>|z|)   Std.lv  Std.all
+  visual =~                                                             
+    x1                1.000                               0.777    0.667
+    x2                0.690    0.124    5.585    0.000    0.536    0.456
+    x3                0.985    0.160    6.157    0.000    0.766    0.678
+  speed =~                                                              
+    x7                1.000                               0.622    0.572
+    x8                1.204    0.170    7.090    0.000    0.749    0.741
+    x9                1.052    0.147    7.142    0.000    0.654    0.649
+  Covariances: THE AMOUNT WHICH TWO VARIABLES CHANGE TOGETHER
+                   Estimate  Std.Err  z-value  P(>|z|)   Std.lv  Std.all
+  visual ~~                                                             
+    speed             0.223    0.052    4.290    0.000    0.460    0.460
+    
+    Visual and speed overlap by 20% 
+    single tilde represents regression, double tilde represents correlation
+    
+    latent variables individually predict manifest variables
+    But the models are estimated with the covarying relationship between the predictor variables
+    
+    ASSESSING MODIFICATION INDICES can improve your model
+    
+    CFI and TLI are below the desired criterion of 0.9. Badness of fit with RMSEA is higher than a base criteria of 0.10 and SRMR.
+    
+    Examine the loadings and variances to determine if manifest variables aren't related to latent variables or having improbable 
+    
+    Each manifest variable is related to the latent variable if the variance is over 0.3
+    
+    variances shouldn't match the real variance - but use the var function to get a range of the variance. Estimated variances are large in comparison to the data when something goes wrong.
+    
+    Modification indices - explore these as a second step. These indicate the oimrpovement on a model if the suggested stimate is added to the model
+    US modification indices with model fit as the main argument - srto = TRUE will show you the biggest changes on top (which is good for complex models) - LHS and 
+    
+    modificationindices(twofactor.fit, sort = TRUE)
+    lhs op rhs     mi    epc sepc.lv sepc.all sepc.nox
+34     x7 ~~  x8 35.521  0.624   0.624    0.568    0.568
+18 visual =~  x9 35.521  0.659   0.512    0.508    0.508
+36     x8 ~~  x9 19.041 -0.527  -0.527   -0.517   -0.517
+16 visual =~  x7 19.041 -0.503  -0.391   -0.359   -0.359
+26     x1 ~~  x9 11.428  0.177   0.177    0.151    0.151
+28     x2 ~~  x7  9.096 -0.184  -0.184   -0.144   -0.144
+17 visual =~  x8  3.557 -0.227  -0.176   -0.175   -0.175
+35     x7 ~~  x9  3.557 -0.164  -0.164   -0.150   -0.150
+24     x1 ~~  x7  3.022 -0.100  -0.100   -0.079   -0.079
+19  speed =~  x1  2.815  0.309   0.192    0.165    0.165
+27     x2 ~~  x3  2.815  0.174   0.174    0.131    0.131
+33     x3 ~~  x9  2.793  0.085   0.085    0.074    0.074
+23     x1 ~~  x3  2.632 -0.298  -0.298   -0.227   -0.227
+
+MI is modification index - this is the amount he chi square index will decrease when added to the model. Last 4 columns indicate extpected parameter change. This table will determine whether to add estimates to a model - add it one at a time and select them for theoretical implications.
+
+To update, you add a line as a new path in the model fit. Then you improve the fit indices.
