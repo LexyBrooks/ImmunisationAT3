@@ -110,6 +110,12 @@ summary(pc2016.fit, standardized = TRUE, fit.measures = TRUE)
 #let's look at the variance of this dataset
 varTable(pc2016.fit)
 ```
+
+```{r}
+#extracts the estimated values of the free parameters in the model
+coef(pc2016.fit)
+```
+
 ```{r}
 lavInspect(pc2016.fit, what="estimates")
 ```
@@ -151,7 +157,7 @@ fitMeasures(pc2016.fit)
 #parameter table
 parameterTable(pc2016.fit)
 ```
-
+##Build the single factor 2015 model
 ```{r}
  #read in the data for 2015 only
 #try this to stop data confusion
@@ -197,7 +203,7 @@ str(Five_Data15)
 
 ```{r}
 #Our geo factor is measured by PHN, IRSAD score and pc immun class
-geo_2015.model <- 'imm =~ mean_tax_000s + political_score + IRSAD_SCORE + per_capita + pc_immun_class'
+geo_2015.model <- 'imm =~ mean_tax_000s + political_score + IRSAD_SCORE + per_capita + pc_immun_class + per_capita'
 geo_2015.fit <- cfa(model = geo_2015.model,
                   data = Five_Data15)
 summary(geo_2015.fit, standardized = TRUE, fit.measures = TRUE)
@@ -221,14 +227,34 @@ semCors(geo_2015.fit)
 
 semCors(geo_2015.fit, titles = TRUE)
 ```
+```{r}
+coef(geo_2015.fit)
+```
+##Merging 2015 and 2016 data into one variable
+##Now let's build a more complete model using the two years to see if things can be confirmed
+```{r}
+
+colnames(Five_Data15)[names(Five_Data15) == "per_capita"] <- "govt_funds_per_person"
+colnames(Five_Data)[names(Five_Data) == "SEIFA_URP"] <- "IRSAD_URP"
+
+all_data <- rbind(Five_Data15, Five_Data)
+
+all_data$postcode <- factor(all_data$postcode, ordered=TRUE)
+all_data$state <- factor(all_data$state, ordered=TRUE)
+all_data$pc_immun <- factor(all_data$pc_immun, ordered=TRUE)
+all_data$PHN_code <- factor(all_data$PHN_code, ordered=TRUE)
+all_data$electorate <- factor(all_data$electorate, ordered=TRUE)
+str(all_data)
+View(all_data)
+```
 
 ##Now let's build a more complete model using the two years to see if things can be confirmed
 ```{r}
-# we will expect the mean tax data to be correlated, as it was repeated across the years due to lack of availability in 2016
 #mixed model of both years
 imm.model.mixed <- 'imm16 =~ pc_immun_class + IRSAD_SCORE + political_score + govt_funds_per_person + mean_tax_000s
-  
-
+  imm15 =~ pc_immun_class + IRSAD_SCORE + political_score + govt_funds_per_person + mean_tax_000s'
+mixed.fit <- cfa(model = imm.model.mixed,
+                  data = all_data)
 ```
 
 ```{r}
