@@ -1,0 +1,241 @@
+---
+title: "SEM immunisation data in Australia, 2015-16 and 2016-17"
+author: "Alex Brooks"
+date: "10/15/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(lavaan)
+library(semPlot)
+options (scipen = 999)
+library(dplyr)
+library(corrplot)
+library(ggplot2)
+library(fields)
+library(dagitty)
+```
+ 
+##First explain the model using 2016-17 immunisation data at postcode level, then build 2015-16 immunisation data at postcode level
+We are trying to answer the question: Do geographic location, socio-economics, political affiliation or government funding have a relationship with immunisation coverage?
+
+We will do this by using SEM on two years of postcode-level immunisation data to either confirm or deny whether a relationship exists.
+
+Latent variables
+% immunisation - this is confusing because this is a manifest variable when used as pc_immun_class , but also a constructed latent variable as it's the 'target' of interest. 
+x =immunisation coverage (as measured by manifest variables of PC immun code   
+y = geo (Geographic areas or clusters, as measured by state, postcode, sa3, electorate)
+z = socio-economics (as measured by SEIFA score and mean tax)
+p = political  (as measured by political score)
+f = funding (as measured by immunisation per person in that postcode or sa3)
+```{r 2016}
+ #read in the data for 2016 only
+Data <-read.csv('../cleaned_data/2016_data_REDUCED.csv')
+str(Data)
+View(Data)
+```
+
+
+```{r per capita funding workings 2016}
+#calculate government funding per postcode
+#Budget papers say the Feds spent $6.4m in 2016 on improving childhood immunisation rates
+#Total population of Australia in 2016 was 24 598 900 according to the ABS
+#We have the SEIFA URP which has the usual resident population per postcode
+#First get per person amount
+total_population <- (24598900)
+total_immun_spend <- (6400000)
+per_capita <- total_population/total_immun_spend
+per_capita
+#3.843578 spend per person
+
+```
+```{r cleaning}
+# Remove NA values
+Data <- Data[complete.cases(Data), ]
+
+```
+#How many postcodes are there in the 2016 set
+2484 postcodes in 2016
+150 electorates in 2016
+31 PHNs in 2016
+12 states in 2016
+```{r}
+#count postcodes
+length(unique(Data$postcode))
+#count eletorates
+length(unique(Data$electorate))
+#count PHNs
+length(unique(Data$PHN_number))
+#count states - because there are doubles from the weird AIHW counting
+length(unique(Data$state))
+```
+
+```{r}
+#Need to make the factors ordered factors to work in Lavaan
+Data$postcode = postcode_factor_ordered <- factor(Data$postcode, ordered = TRUE)
+Data$state = state_factor_ordered <- factor(Data$state, ordered = TRUE)
+Data$pc_immun = pc_immun_factor_ordered <- factor(Data$pc_immun, ordered = TRUE)
+Data$PHN_code = PHN_code_factor_ordered <- factor(Data$PHN_code, ordered = TRUE)
+Data$electorate = electorate_factor_ordered <- factor(Data$electorate, ordered = TRUE)
+Data$govt_funds_per_person = funds_ordered <- as.numeric(Data$govt_funds_per_person)
+glimpse(Data)
+```
+
+
+```{r}
+#filter just by 5 year olds - as the per capita info in spreadsheet is duplicating by age group
+Five_Data = Data%>%
+  filter(age == 5) 
+
+  
+str(Five_Data)
+```
+
+
+
+#First 2016 model - assessing a real value against the other real values (IE, not latent yet)
+
+  # single factor model
+    imm =~ pc_immun_class + IRSAD_SCORE + political_score + govt_funds_per_person + mean_tax_000s
+    
+
+```{r}
+#let's build 2016pc.model the standard way
+pc2016.model <- 'imm =~ pc_immun_class + IRSAD_SCORE + political_score + govt_funds_per_person + mean_tax_000s'
+pc2016.fit <- cfa(model=pc2016.model,
+                  data = Five_Data, std.lv = TRUE)
+summary(pc2016.fit, standardized = TRUE, fit.measures = TRUE)
+```
+```{r}
+#let's look at the variance of this dataset
+varTable(pc2016.fit)
+```
+```{r}
+lavInspect(pc2016.fit, what="estimates")
+```
+
+```{r}
+
+semPaths(pc2016.fit, title=TRUE, exoVar = TRUE, exoCov = TRUE)
+```
+```{r}
+semPaths(pc2016.fit,  what = "stand", rotation = 4)
+```
+
+```{r}
+#
+semCors(pc2016.fit, titles = TRUE)
+```
+```{r}
+ #let's build to account for missing pc immun data
+pc2016.fit2 <- cfa(model=pc2016.model,
+                  data = Five_Data, estimator = "MLR", missing = "ml")
+summary(pc2016.fit2, standardized = TRUE, fit.measures = TRUE)
+#THIS IS THE ONE TO PUBLISH AS MODEL FIT
+```
+```{r}
+#Let's bootstrap the model
+pc2016.fit3 <- cfa(model=pc2016.model,
+                  data = Five_Data, se = "bootstrap", verbose = TRUE, bootstrap = 1000)
+
+```
+```{r}
+#fitmeasures
+fitMeasures(pc2016.fit2)
+```
+```{r}
+#fit measures for first simple model)
+fitMeasures(pc2016.fit)
+```
+```{r}
+#parameter table
+parameterTable(pc2016.fit)
+```
+
+```{r}
+ #read in the data for 2015 only
+#try this to stop data confusion
+char_data <- read.csv('../cleaned_data/2015_dataREDUCED.csv')
+str(char_data)
+```
+```{r}
+#Need to make the factors ordered factors to work in Lavaan
+char_data$postcode = postcode_factor_ordered <- factor(char_data$postcode, ordered = TRUE)
+char_data$state = state_factor_ordered <- factor(char_data$state, ordered = TRUE)
+char_data$pc_immun = pc_immun_factor_ordered <- factor(char_data$pc_immun, ordered = TRUE)
+char_data$PHN_code = PHN_code_factor_ordered <- factor(char_data$PHN_code, ordered = TRUE)
+char_data$electorate = electorate_factor_ordered <- factor(char_data$electorate, ordered = TRUE)
+char_data$per_capita = funds_ordered <- as.numeric(char_data$per_capita)
+glimpse(char_data)
+```
+
+ 
+ Calculate per capita spend 
+ Govt spent $8.4m, population total was 24 127 200 in 2015-16
+
+#calculate government funding per postcode
+ #We have the SEIFA URP which has the usual resident population per postcode
+#First get per person amount
+```{r}
+#total_population15 <- (24127200)
+#total_immun_spend15 <- (8400000)
+#per_capita15 <- total_population15/total_immun_spend15
+#per_capita15
+#2.87228 spend per person
+```
+
+Filter for 5 year olds
+```{r}
+#filter just by 5 year olds - as the per capita info in spreadsheet is duplicating by age group
+Five_Data15 = char_data%>%
+  filter(age == 5) 
+#make sure all are ordered factors, as data seems to have changed from previous str
+Five_Data15$per_capita = funds_ordered <- as.numeric(Five_Data15$per_capita)
+glimpse(Five_Data15)
+str(Five_Data15)
+```
+
+```{r}
+#Our geo factor is measured by PHN, IRSAD score and pc immun class
+geo_2015.model <- 'imm =~ mean_tax_000s + political_score + IRSAD_SCORE + per_capita + pc_immun_class'
+geo_2015.fit <- cfa(model = geo_2015.model,
+                  data = Five_Data15)
+summary(geo_2015.fit, standardized = TRUE, fit.measures = TRUE)
+  
+```
+
+
+```{r}
+lavInspect(geo_2015.fit, what="estimates")
+```
+```{r}
+semPaths(geo_2015.fit,  what = "stand", rotation = 4)
+```
+
+```{r}
+semCors(geo_2015.fit)
+```
+
+
+```{r}
+
+semCors(geo_2015.fit, titles = TRUE)
+```
+
+##Now let's build a more complete model using the two years to see if things can be confirmed
+```{r}
+# we will expect the mean tax data to be correlated, as it was repeated across the years due to lack of availability in 2016
+#mixed model of both years
+imm.model.mixed <- 'imm16 =~ pc_immun_class + IRSAD_SCORE + political_score + govt_funds_per_person + mean_tax_000s
+  
+
+```
+
+```{r}
+```
+```{r}
+```
+```{r}
+```
+
+
