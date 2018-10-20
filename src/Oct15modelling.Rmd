@@ -1,0 +1,202 @@
+---
+title: "LavaanModellingOct15"
+author: "Alex Brooks"
+date: "10/15/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(lavaan)
+library(semPlot)
+options (scipen = 999)
+library(dplyr)
+library(caret)
+library(corrplot)
+library(glmnet)
+library(gapminder)
+library(openintro)
+library(ggplot2)
+library(Amelia)
+library(missMDA)
+```
+ 
+ 
+
+## Let's just look at trying to make some single factor lavaan models work  
+
+Start with 2016 only data
+
+```{r 2016}
+ #read in the data for 2016 only
+Data <-read.csv('../cleaned_data/2016_data.csv')
+str(Data)
+```
+```{r}
+#Filter and clean data to get only the variables we really want
+
+geo_data <- Data %>%
+  select(postcode, state, year, age, pc_immun, caution, pc_immun_class, PHN_number, IEO_SCORE, IER_SCORE, IRSAD_SCORE, IRSD_SCORE, electorate, mean_tax_000s, political_score)
+str(geo_data)
+```
+##Remove zeros from pc_immun_class
+This seems an impossible task - ask Kirsty or Jarod tonight
+```{r cleaning}
+# Remove NA values
+Data <- Data[complete.cases(Data), ]
+
+#Need to make the factors ordered factors to work in Lavaan
+Data$postcode = postcode_factor_ordered <- factor(Data$postcode, ordered = TRUE)
+Data$state = state_factor_ordered <- factor(Data$state, ordered = TRUE)
+Data$pc_immun = pc_immun_factor_ordered <- factor(Data$pc_immun, ordered = TRUE)
+Data$PHN_code = PHN_code_factor_ordered <- factor(Data$PHN_code, ordered = TRUE)
+Data$electorate = electorate_factor_ordered <- factor(Data$electorate, ordered = TRUE)
+glimpse(Data)
+```
+
+```{r, fig.width=18, fig.height=12}
+#correlation plot - this won't work, I think due to NAs
+cplot <- geo_data %>%
+  select_if(is.numeric)
+
+
+M <- cor(cplot)
+p.mat <- cor.mtest(M)
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+corrplot(M, 
+         method = "color",
+         order= "hclust",
+         type="full",
+         col=col(200),
+         diag =F,
+         title="Correlation of Numeric Variables",
+         addCoef.col = "black",
+         sig.level = 0.05,
+         insig ="blank",
+         mar=c(0,0,3,0))
+
+```
+ 
+
+#First 2016 model - not very good
+```{r}
+pc.model <- 'pc_immun_class =~ postcode + PHN_number + IRSAD_SCORE + electorate + state'
+pc.fit <- cfa(model=pc.model,
+                  data = Data)
+summary(pc.fit, standardized = TRUE, fit.measures = TRUE)
+#PHn number could be linearly regressed - does not make sense 
+
+```
+```{r}
+lavInspect(pc.fit, what="estimates")
+```
+
+```{r}
+semPaths(pc.fit,  what = "stand", rotation = 4)
+```
+
+You can also embed plots, for example:
+
+```{r}
+semCors(pc.fit)
+```
+
+#Try the same single factor model as first model usng 2015 data  
+```{r 2015}
+ #read in the data for 2015 only
+#try this to stop data confusion
+char_data <- read.csv('../cleaned_data/2015_data.csv', stringsAsFactors=F)
+num_data <- data.frame(data.matrix(char_data))
+numeric_columns <- sapply(num_data,function(x){mean(as.numeric(is.na(x)))<0.5})
+final_data <- data.frame(num_data[,numeric_columns], char_data[,!numeric_columns])
+str(final_data)
+```
+ 
+
+```{r}
+#Our geo factor is measured by PHN, IRSAD score and pc immun class
+geo_2015.model <- 'pc_immun_class =~ postcode + PHN_number + IRSAD_SCORE'
+geo_2015.fit <- cfa(model = geo_2015.model,
+                  data = final_data)
+summary(geo_2015.fit, standardized = TRUE, fit.measures = TRUE)
+  
+```
+
+
+```{r}
+lavInspect(geo_2015.fit, what="estimates")
+```
+```{r}
+semPaths(geo_2015.fit,  what = "stand", rotation = 4)
+```
+
+You can also embed plots, for example:
+
+```{r}
+semCors(geo_2015.fit)
+```
+```{r}
+#modification indices (rmsea and srmr need to be below 0.10)
+#look at loading and variances to check whether they are improbable or just don't relate to the latent variable, if loadings are over point 3 (variance will be large in comparison to the data)
+#var(final_data)
+
+```
+
+#Not a great geo model
+QUESTIONS:
+How can I correctly set the weight of these to become properly measured manifest variables?
+
+#Third model
+```{r}
+#Try a single factor model on the sentiment of trust
+
+trust.model <- 'score =~ IRSAD_SCORE + political_score + mean_tax_000s + postcode'
+trust.fit <- cfa(model=trust.model,
+                  data = geo_data)
+summary(trust.fit, standardized = TRUE, fit.measures = TRUE)
+  
+```
+```{r}
+
+semCors(trust.fit)
+```
+
+```{r}
+semPaths(trust.fit,  what = "stand", rotation = 4)
+```
+```{r}
+semCors(trust.fit, include="difference")
+```
+##This isn't really working
+Let's see if we can replicate the geo modelling at SA3 level
+##Fourth model
+```{r}
+#try this to stop data confusion
+char_data <- read.csv('../raw_data/sa3_immune.csv', stringsAsFactors=F)
+num_data <- data.frame(data.matrix(char_data))
+numeric_columns <- sapply(num_data,function(x){mean(as.numeric(is.na(x)))<0.5})
+final_data <- data.frame(num_data[,numeric_columns], char_data[,!numeric_columns])
+str(final_data)
+```
+
+
+```{r}
+ 
+#Try a single factor model
+#Our geo factor is measured by PHN, IRSAD score and pc immun class
+sa3.model <- 'sa3 =~ SA3_code + year_start + age + num_not_fully_immunised + num_fully_immunised + percent_fully_immunised'
+sa3.fit <- cfa(model=sa3.model,
+                  data = final_data)
+summary(sa3.fit, standardized = TRUE, fit.measures = TRUE)
+  
+```
+
+```{r}
+#plot it
+lavInspect(sa3.fit, what="estimates")
+```
+```{r}
+semPaths(sa3.fit,  what = "stand", rotation = 4)
+```
+```{r}
+semCors(sa3.fit, include="difference")
+```

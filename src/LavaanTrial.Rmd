@@ -11,6 +11,7 @@ Try to do exploratory factor analysis, when you have a dataset in shape
 library(lavaan)
 library(tidyverse)
 library(dplyr)
+library(corrplot)
 options(scipen = 999)
 ```
 
@@ -37,27 +38,39 @@ Data <-read.csv('../cleaned_data/all_immunisation_seifa.csv')
 str(Data)
 #think about transforming federal electorates by left and right scores?
 ```
+
+
+```{r, fig.width=12, fig.height=10}
+#check correlation between variables on Data that is numeric
+#remove factors to run correlation plots on cor(Data)
+#don't want ID- keep 2 - sex, education marriage or age
+removed <- Data[,-c(2,5,8,50)]  
+corplot <-cor(removed)
+corrplot(corplot, method="pie") 
+```
+
+
+
+
 ```{r}
 #Select the manifest variables
-#IRSAD_SCORE, IRSD_SCORE,IEO_SCORE, IER_SCORE, (or try all seifa numbers first) mean_tax, electorate, PHN number, pc_immun_class, year, age, postcode?
-#think about factoring electorate into LEFT for Greens and Independents and Labor who are RED and RIGHT for Libs, Nats, Conservative Independents
-
+# 
 #Latent variable is immun_class - let's try a single factor model
-#latent variable i s pc immun in this experiment
+#latent variable i s pc immun in this experiment and this is a bad model for using all SEIFA scores
 imm.model <- 'pc_immun_class =~ mean_tax_000s+IRSD_SCORE+IRSAD_SCORE+IER_SCORE+IEO_SCORE+PHN_number'
 imm.fit <- cfa(model=imm.model,
                   data = Data)
 summary(imm.fit, standardized = TRUE, fit.measures = TRUE)
   
 ```
-#the single factor model is very poor fitting
+#this first model is possibly the best fit
 Let's try some different variables and see how it comes together
 ```{r}
-imm.model2 <- 'pc_immun_class =~ mean_tax+PHN_number+age
-age =~ IRSD_MAXS+IRSD_MINS+IRSAD_MAXS+IRSAD_MINS+IER_MAXS+IER_MINS+IEO_MAXS+IEO_MINS'
+imm.model2 <- 'pc_immun_class =~ mean_tax_000s + PHN_number + age
+socio =~ IRSD_SCORE + postcode + IRSAD_SCORE'
 imm.fit2 <- cfa(model=imm.model2,
                   data = Data)
-summary(imm.fit2, standardized = TRUE, fit.measures = TRUE mse = TRUE)
+summary(imm.fit2, standardized = TRUE, fit.measures = TRUE)
   
 ```
 ```{r}
@@ -65,17 +78,17 @@ imm.model3 <- 'pc_immun_class =~ IRSD_MAXS+IRSD_MINS+IRSAD_MAXS+IRSAD_MINS+IER_M
 postcode=~ PHN_number+age+IRSD_SCORE+IRSAD_SCORE+IER_SCORE+IEO_SCORE'
 imm.fit3 <- cfa(model=imm.model3,
                   data = Data)
-summary(imm.fit3, standardized = TRUE, fit.measures = TRUE, rse = TRUE)
+summary(imm.fit3, standardized = TRUE, fit.measures = TRUE)
   
 ```
 ```{r}
-imm.model4 <- 'pc_immun_class =~ mean_tax+ IRSD_MAXS+IRSD_MINS+IRSAD_MAXS+IRSAD_MINS+IER_MAXS+IER_MINS+IEO_MAXS+IEO_MINS
-age=~ pc_immun_class+IRSD_SCORE+IRSAD_SCORE+IER_SCORE+IEO_SCORE+IRSD_URP+IRSAD_URP+IER_URP+IEO_URP'
+imm.model4 <- 'pc_immun_class =~ mean_tax_000s + IRSD_SCORE+IRSAD_SCORE+IER_SCORE+IEO_SCORE'
 imm.fit4 <- cfa(model=imm.model4,
                   data = Data)
 summary(imm.fit4, standardized = TRUE, fit.measures = TRUE)
 #v bad
 ```
+
 ```{r}
 imm.model5 <- 'pc_immun_class =~ total_tax+mean_tax+ IRSD_MAXS+IRSD_MINS+IRSAD_MAXS+IRSAD_MINS+IER_MAXS+IER_MINS+IEO_MAXS+IEO_MINS+ IRSD_SCORE+IRSAD_SCORE+IER_SCORE+IEO_SCORE'
 imm.fit5 <- cfa(model=imm.model5,
@@ -108,6 +121,8 @@ summary(elec.fit2, standardized = TRUE, fit.measures = TRUE)
 
 ```{r}
 elec.model2 <- 'pc_immun_class =~ _score+IRSD_SCORE+IRSAD_SCORE+IER_SCORE+IEO_SCORE+IRSD_URP+IRSAD_URP+IER_URP+IEO_URP
+```
+
 ##Selecting variables for SEM 
 I need to transform mean_tax in some way to be relative to the other numbers??? Not sure how to do that
 

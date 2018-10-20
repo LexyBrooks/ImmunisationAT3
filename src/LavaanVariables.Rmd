@@ -4,7 +4,7 @@ author: "Alex Brooks"
 date: "10/12/2018"
 output: html_document
 ---
-
+## SEM MODELLING ON VACCINATION DATA
 ```{r setup, include=FALSE}
 library(lavaan)
 library(semPlot)
@@ -16,39 +16,18 @@ library(glmnet)
 library(gapminder)
 library(openintro)
 library(ggplot2)
+library(Amelia)
+library(missMDA)
 ```
 
-## Using Structural Equation Modelling to explore vaccination data
-
-In AT2, The Vaccinators made the assumption that vaccination coverage rates (as measured by the Australian Institute for Health and Welfare at postcode level) were influenced by a range of geographical and socio-economic indicators (as measured by the four SEIFA indexes held by the ABS).
-We suspected qualitative measures such as search demand and news stories on anti-vax and vaccination topics influenced the rate of "trust" people had in vaccines and immunisation - and we tried to measure and model this, but could not. Other factors like government spending, and harsher public policy measures like No Jab, No Play - which banned conscientious objection to vaccination - were also at play but hard to measure.
-
-We had hypothesised that political affiliation may also influence vaccination rates, but when looking at federal electorates and vaccination rates, found this not to be true, with many different political affiliations demonstrating both high and low immunisation coverage rates, in no identifiable pattern.
-Our analysis in AT2 fell apart due to the high volume of Not Published postcode level data in the year 2016, and in this new assignment, I plan to:
-- explore the class of immunisation coverage as a latent variable, manifested by our data variables of:
-- mean tax paid at postcode level, measured by ATO statistics
-- SEIFA scores by postcode
-- age of child at immunisation coverage measurement
-- Primary Health Network area
-
-
-I chose SEM because it helps to model the causal questions which initially attracted me to this topic, and I wanted to see if I could use data once and for all to rule out - or rule in - our hypothesis that:
-1. Sentiment has a relationship with vaccination coverage rates
-2. That immunisation coverage is influenced by SEIFA and mean tax and political affiliation.
  
 
 ```{r}
-#Let's start with a simple one factor SEM 
- 
+#read in the data
 Data <-read.csv('../cleaned_data/all_immunisation_seifa.csv')
 str(Data)
 ```
-##Let's try correlation plot
-```{r, fig.width=20, fig.height=30}
-removed <- Data[,-c(2,5,8,50)]  
-corplot <-cor(removed)
-corrplot(corplot, method="pie") 
-```
+
 ##try to assess feature importance, using the traditional examindation of the dataset in 'https://github.com/jeromyanglim/lavaan-examples/blob/master/path-analysis/path-analysis.rmd'
 What is the data
 three geographic variables - can these be predictors? PHN number, Electorate, Postcode and SA3 in a separate datasets
@@ -56,18 +35,13 @@ one dependent variable - vaccine trust (or is this the mediator variable)
 - Choose one SEIFA score, not all
 - Choose political score
 - Choose mean tax
-
+Create density plots of key variables
 ```{r}
-#What is the data
-# three geographic variables - can these be manifest variables? PHN number, Electorate, Postcode and SA3 in a separate datasets
-# one dependent variable - vaccine trust? or is this the mediator variable?
 
 # Create density plots of key variables
 Data %>%
   ggplot(aes(pc_immun_class)) +
   geom_density()
-
- 
 
 ```
 
@@ -92,10 +66,21 @@ Data %>%
   ggplot(aes(total_tax)) +
   geom_density()
 ```
-  
 
+## What shall we do with 0 pc immun class? Remove them
 
-## Let's start with some simple modelling
+With missing data - this data is NOT PUBLISHED - so it's not missing at random. Dr Erin M Buchanan says you can exclude the extraneous variable and use something different
+
+MEAN SUBSTITUTION
+There are ways to estimate methods to fill in missing data - mean substitution fills in the average for that column by year. That's the default in SPSS, and it's a conservative approach as it doesn't change average scores but will lower the variance. Because it reduces variance, that creates more of a Type 1 error. That's why most people like to limit imputation to 5%. It can make a p value slip.
+
+MULTIPLE IMPUTATION
+this is considered the best way to do this, in R it's easier using MICE. You run multiple times and look at the data across and down. You can't replace categorical variables or demographics - either leave them out or pairwise eliminate them. Categorical and demographic variables should not be eliminated by leaving them out or doing pairwise elimination
+
+IMPUTE USING PCA
+Authors Josse and Husson propose multiple correspondence analysis for categorical variables, factorial analysis on mixed data for both continuous and categorical variables, and multiple factor analysis for multi-table data. Furthermore, missMDA can be used to perform single imputation to complete data involving continuous, categorical and mixed variables. A multiple imputation method is also available. In the principal component analysis framework, variability across different imputations is represented by confidence areas around the row and column positions on the graphical outputs. This allows assessment of the credibility of results obtained from incomplete data sets
+
+Have to estimate the PCA variations first.
  
 
 ```{r}

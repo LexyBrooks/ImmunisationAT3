@@ -1,0 +1,47 @@
+---
+title: "SA3immunelavaan"
+author: "Alex Brooks"
+date: "13 October 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(lavaan)
+library(semPlot)
+options (scipen = 999)
+library(dplyr)
+library(caret)
+library(corrplot)
+library(tidyverse)
+```
+
+## SA3
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+#Let's start with a simple one factor SEM using SA3
+ 
+sadata <- read.csv('sa3_immune.csv', stringsAsFactors = FALSE)
+#check Titanic read in
+str(sadata)
+```
+
+```{r}
+#change factors of immun to integer or double
+num_registered <- as.integer(sadata$num_registered)
+str(sadata)
+```
+
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

@@ -1,0 +1,402 @@
+---
+title: "Beaujean Modelling in R for SEM"
+author: "Alex Brooks"
+date: "10/15/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(lavaan)
+library(semPlot)
+options (scipen = 999)
+library(dplyr)
+library(caret)
+library(corrplot)
+library(glmnet)
+library(gapminder)
+library(openintro)
+library(ggplot2)
+library(fields)
+library(dagitty)
+```
+ 
+##First try making a DAG  - a graphic to explain my hypothesis
+
+x = pc_immun_code (percent_immunised sa3, pc immun rank by postcode)
+y = geo (state, postcode, sa3, electorate - could do clusters)
+z = socio (SEIFA score)
+p = political  - political score
+t = tax - mean tax 000s
+```{r}
+g <- dagitty('dag {
+    X [pos="0,1"]
+    Y [pos="1,1"]
+    Z [pos="2,1"]
+    P[pos="1,0"]
+    T [pos="2,2"]
+    
+    X -> Y -> Z  
+    X -> Z -> Y -> T -> P
+    P -> Z
+    X -> P -> Z -> Y
+}')
+plot(g)
+```
+
+```{r}
+#name all the parents of x
+parents( g, "P" )
+#these are T and X
+```
+```{r}
+#name all the ancestors of x
+ancestors( g, "P" )
+#"P" "X" "T" "Y" "Z"
+```
+```{r}
+#name all the childrens of P
+children( g, "P" )
+#z
+```
+```{r}
+#name all the descendents of P
+descendants( g, "P" )
+# "P" "Z" "Y" "T"
+```
+```{r}
+#draw all simple paths between P and T
+paths( g, "P", "T" )$paths
+
+```
+```{r}
+#draw all the directed paths between P and T
+paths( g, "P", "T", directed=TRUE )$paths
+```
+### Dagitty study questions
+x = pc_immun_code (percent_immunised sa3, pc immun rank by postcode)
+y = geo (state, postcode, sa3, electorate - could do clusters)
+z = socio (SEIFA score)
+p = political  - political score
+t = tax - mean tax 000s
+
+Does tax, political, socio or geo cause x? 
+```{r}
+N <- 2484 # 2484 is our sample size, as that's the number of postcodes and entries
+Ux <- rnorm( N ); Uy <- rnorm( N ); Uz <- rnorm( N )
+X <- Ux
+Y <- 1/3*X + Uy
+Z <- 1/16*Y + Uz
+d <- data.frame(X=X,Y=Y,Z=Z)
+```
+
+```{r}
+g <- dagitty("dag {
+    Ux -> X -> Y -> Z <- Uz
+    Uy -> Y
+}")
+coordinates(g) <- list(
+    x=c(Ux=1,Uy=2,Uz=3,X=1,Y=2,Z=3),
+    y=c(Ux=1,Uy=1,Uz=1,X=0,Y=0,Z=0) )
+plot(g)
+```
+```{r}
+#determine the best guess of the value of z if we observe y = 3
+16 * predict(lm(Z~Y,d),list(Y=3),interval="confidence")
+```
+```{r}
+#Determine the best guess of the value of Z, given that we observe X=1 and Y=3.
+16 * predict(lm(Z~X+Y,d),list(X=1,Y=3),interval="confidence")
+```
+```{r}
+#Determine the best guess of X, given that we observed Y=2.
+cov(d)
+
+```
+#The regression coefficient of X∼Y should be 13/(1+19)=930=0.3. So the best guess should be 0.6.
+```{r}
+predict(lm(X~Y,d),list(Y=2),interval="confidence")
+```
+#Determine the best guess of Y, given that we observed X=1 and Z=3.
+```{r}
+#Finding this value requires an involved calculation, which gives an answer close to (but not equal to) 0.5. In case you wish to verify your result, here’s how:
+predict(lm(Y~X+Z,d),list(X=1,Z=3),interval="confidence")
+```
+
+
+## First, bring in the 2016 postcode-level data, and analyse the 5 year olds only
+
+Start with 2016 only data, which has had funding per capita added, political score added and reduced SEIFA scores created.
+
+```{r 2016}
+ #read in the data for 2016 only
+Data <-read.csv('../cleaned_data/2016_data_reduced.csv')
+str(Data)
+View(Data)
+```
+
+
+```{r per capita funding workings 2016}
+#calculate government funding per postcode
+#Budget papers say the Feds spent $6.4m in 2016 on improving childhood immunisation rates
+#Total population of Australia in 2016 was 24 598 900 according to the ABS
+#We have the SEIFA URP which has the usual resident population per postcode
+#First get per person amount
+total_population <- (24598900)
+total_immun_spend <- (6400000)
+per_capita <- total_population/total_immun_spend
+per_capita
+#3.843578 spend per person
+
+```
+```{r cleaning}
+# Remove NA values
+Data <- Data[complete.cases(Data), ]
+
+```
+#How many postcodes are there in the 2016 set
+2484 postcodes in 2016
+150 electorates in 2016
+31 PHNs in 2016
+12 states in 2016
+```{r}
+#count postcodes
+length(unique(Data$postcode))
+#count eletorates
+length(unique(Data$electorate))
+#count PHNs
+length(unique(Data$PHN_number))
+#count states - because there are doubles from the weird AIHW counting
+length(unique(Data$state))
+```
+
+```{r}
+#Need to make the factors ordered factors to work in Lavaan
+Data$postcode = postcode_factor_ordered <- factor(Data$postcode, ordered = TRUE)
+Data$state = state_factor_ordered <- factor(Data$state, ordered = TRUE)
+Data$pc_immun = pc_immun_factor_ordered <- factor(Data$pc_immun, ordered = TRUE)
+Data$PHN_code = PHN_code_factor_ordered <- factor(Data$PHN_code, ordered = TRUE)
+Data$electorate = electorate_factor_ordered <- factor(Data$electorate, ordered = TRUE)
+Data$govt_funds_per_person = funds_ordered <- as.numeric(Data$govt_funds_per_person)
+glimpse(Data)
+```
+
+```{r, fig.width=18, fig.height=12}
+ 
+#correlation plot - this won't work, I think due to NAs - this works in OCt15 modelling doc
+cplot <- Data %>%
+  select_if(is.numeric)
+
+
+M <- cor(cplot)
+mat <- cor.mtest(M)
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+corrplot(M, 
+         method = "color",
+         order= "hclust",
+         type="full",
+         col=col(200),
+         diag =F,
+         title="Correlation of Numeric Variables",
+         addCoef.col = "black",
+         sig.level = 0.05,
+         insig ="blank",
+         mar=c(0,0,3,0))
+
+```
+
+
+```{r}
+#filter just by 5 year olds - as the per capita info in spreadsheet is duplicating by age group
+Five_Data = Data%>%
+  filter(age == 5) 
+
+  
+str(Five_Data)
+```
+```{r}
+#let's look at the variance of this dataset
+varTable(pc.fit)
+```
+
+
+#First 2016 model - assessing a real value against the other real values (IE, not latent yet)
+
+  # single factor model
+    geo =~ pc_immun_class + IRSAD_SCORE + political_score + govt_funds_per_person
+    
+
+```{r}
+
+pc.model <- 'geo =~ pc_immun_class + IRSAD_SCORE + political_score + govt_funds_per_person'
+pc.fit <- cfa(model=pc.model,
+                  data = Five_Data, std.lv = TRUE)
+summary(pc.fit, standardized = TRUE, fit.measures = TRUE)
+
+```
+```{r}
+lavInspect(pc.fit, what="estimates")
+```
+
+```{r}
+semPaths(pc.fit,  what = "stand", rotation = 4)
+```
+
+You can also embed plots, for example:
+
+```{r}
+semCors(pc.fit)
+```
+
+#Try the same single factor model as first model usng 2015 data  
+```{r 2015}
+ #read in the data for 2015 only
+#try this to stop data confusion
+char_data <- read.csv('../cleaned_data/2015_dataREDUCED.csv')
+str(char_data)
+```
+```{r}
+#Need to make the factors ordered factors to work in Lavaan
+char_data$postcode = postcode_factor_ordered <- factor(char_data$postcode, ordered = TRUE)
+char_data$state = state_factor_ordered <- factor(char_data$state, ordered = TRUE)
+char_data$pc_immun = pc_immun_factor_ordered <- factor(char_data$pc_immun, ordered = TRUE)
+char_data$PHN_code = PHN_code_factor_ordered <- factor(char_data$PHN_code, ordered = TRUE)
+char_data$electorate = electorate_factor_ordered <- factor(char_data$electorate, ordered = TRUE)
+char_data$per_capita = funds_ordered <- as.numeric(char_data$per_capita)
+glimpse(char_data)
+```
+
+ 
+ Calculate per capita spend 
+ Govt spent $8.4m, population total was 24 127 200 in 2015-16
+
+#calculate government funding per postcode
+ #We have the SEIFA URP which has the usual resident population per postcode
+#First get per person amount
+```{r}
+total_population15 <- (24127200)
+total_immun_spend15 <- (8400000)
+per_capita15 <- total_population15/total_immun_spend15
+per_capita15
+#2.87228 spend per person
+```
+
+Filter for 5 year olds
+```{r}
+#filter just by 5 year olds - as the per capita info in spreadsheet is duplicating by age group
+Five_Data15 = char_data%>%
+  filter(age == 5) 
+
+  
+str(Five_Data15)
+```
+
+```{r}
+#Our geo factor is measured by PHN, IRSAD score and pc immun class
+geo_2015.model <- 'socio =~ mean_tax_000s + political_score + IRSAD_SCORE + per_capita + pc_immun_class'
+geo_2015.fit <- cfa(model = geo_2015.model,
+                  data = Five_Data15)
+summary(geo_2015.fit, standardized = TRUE, fit.measures = TRUE)
+  
+```
+
+
+```{r}
+lavInspect(geo_2015.fit, what="estimates")
+```
+```{r}
+semPaths(geo_2015.fit,  what = "stand", rotation = 4)
+```
+
+You can also embed plots, for example:
+
+```{r}
+semCors(geo_2015.fit)
+```
+```{r}
+#modification indices (rmsea and srmr need to be below 0.10)
+#look at loading and variances to check whether they are improbable or just don't relate to the latent variable, if loadings are over point 3 (variance will be large in comparison to the data)
+#var(final_data)
+
+```
+
+# Let's try SA3 data and see if it can get a model working
+```{r}
+sa3 <-read.csv('../cleaned_data/sa3_immuneMERGED.csv')
+str(sa3)
+```
+
+
+```{r cleaning}
+# Remove NA values
+sa3 <- sa3[complete.cases(sa3), ]
+
+```
+
+
+```{r}
+#Need to make the factors ordered factors to work in Lavaan
+sa3$state = state_factor_ordered <- factor(sa3$state, ordered = TRUE)
+sa3$num_registered = num_registered_factor_ordered <- as.numeric(sa3$num_registered, ordered = TRUE)
+sa3$num_fully_immunised = imm_factor_ordered <- as.numeric(sa3$num_fully_immunised, ordered = TRUE)
+sa3$num_not_fully_immunised = not_imm_factor_ordered <- as.numeric(sa3$num_not_fully_immunised, ordered = TRUE)
+sa3$percent_fully_immunised = percent_ordered <- factor(sa3$percent_fully_immunised, ordered = TRUE)
+sa3$Remoteness = Remoteness_ordered <-factor(sa3$Remoteness, ordered = TRUE)
+glimpse(sa3)
+ 
+```
+```{r}
+#filter for 5 year olds like the other dataset
+Five_sa3 = sa3%>%
+  filter(age == 5) %>%
+  filter(pc_immun)
+
+  
+str(Five_sa3)
+
+```
+
+
+#Try building a model with SA3 level data
+```{r}
+#sa3
+sa3.model <- 'score =~ percent_fully_immunised + Remoteness+'
+sa3.fit <- cfa(model=sa3.model,
+                  data = Five_sa3)
+summary(sa3.fit, standardized = TRUE, fit.measures = TRUE)
+  
+```
+```{r}
+
+semCors(trust.fit)
+```
+
+```{r}
+semPaths(trust.fit,  what = "stand", rotation = 4)
+```
+```{r}
+semCors(trust.fit, include="difference")
+```
+##This isn't really working
+Let's see if we can replicate the geo modelling at SA3 level
+
+```{r}
+ 
+#Try a single factor model
+#Our geo factor is measured by PHN, IRSAD score and pc immun class
+sa3.model <- 'sa3 =~ SA3_code + year_start + age + num_not_fully_immunised + num_fully_immunised + percent_fully_immunised'
+sa3.fit <- cfa(model=sa3.model,
+                  data = final_data)
+summary(sa3.fit, standardized = TRUE, fit.measures = TRUE)
+  
+```
+
+```{r}
+#plot it
+lavInspect(sa3.fit, what="estimates")
+```
+```{r}
+semPaths(sa3.fit,  what = "stand", rotation = 4)
+```
+```{r}
+semCors(sa3.fit, include="difference")
+```
