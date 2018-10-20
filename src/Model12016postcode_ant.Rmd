@@ -32,8 +32,6 @@ f = funding (as measured by immunisation per person in that postcode or sa3)
 ```{r 2016}
  #read in the data_2016 for 2016 only
 data_2016 <-read.csv('../cleaned_data/2016_data_REDUCED.csv')
-str(data_2016)
-View(data_2016)
 ```
 
 
@@ -195,19 +193,19 @@ glimpse(data_2015)
 Filter for 5 year olds
 ```{r}
 #filter just by 5 year olds - as the per capita info in spreadsheet is duplicating by age group
-Five_data_201615 = data_2015%>%
+Five_data_2015 = data_2015%>%
   filter(age == 5) 
 #make sure all are ordered factors, as data_2016 seems to have changed from previous str
-Five_data_201615$per_capita = funds_ordered <- as.numeric(Five_data_201615$per_capita)
-glimpse(Five_data_201615)
-str(Five_data_201615)
+Five_data_2015$per_capita = funds_ordered <- as.numeric(Five_data_2015$per_capita)
+glimpse(Five_data_2015)
+str(Five_data_2015)
 ```
 
 ```{r}
 #Our geo factor is measured by PHN, IRSAD score and pc immun class
 geo_2015.model <- 'imm =~ mean_tax_000s + political_score + IRSAD_SCORE + per_capita + pc_immun_class'
 geo_2015.fit <- cfa(model = geo_2015.model,
-                  data = Five_data_201615)
+                  data = Five_data_2015)
 summary(geo_2015.fit, standardized = TRUE, fit.measures = TRUE)
   
 ```
@@ -232,17 +230,50 @@ semCors(geo_2015.fit, titles = TRUE)
 
 ##Now let's build a more complete model using the two years to see if things can be confirmed
 ```{r}
+data_2015 <- Five_data_2015 %>%
+  select(postcode, state, pc_immun, pc_immun_class, IRSAD_SCORE, electorate, mean_tax_000s, political_score, per_capita)
 
+str(data_2015)
+```
+
+```{r}
+data_2016 <- Five_data_2016 %>%
+  select(postcode, state, pc_immun, pc_immun_class, IRSAD_SCORE, electorate, mean_tax_000s, political_score, govt_funds_per_person)
+
+str(data_2016)
+```
+
+```{r}
 colnames(data_2015)[names(data_2015) == "per_capita"] <- "govt_funds_per_person"
 colnames(data_2016)[names(data_2016) == "SEIFA_URP"] <- "IRSAD_URP"
 
-all_data <- rbind(data_2015, data_2016)
+
+colnames(data_2015)[names(data_2015) == "pc_immun"] <- "pc_immun_2015"
+colnames(data_2015)[names(data_2015) == "pc_immun_class"] <- "pc_immun_class_2015"
+colnames(data_2015)[names(data_2015) == "IRSAD_SCORE"] <- "IRSAD_SCORE_2015"
+colnames(data_2015)[names(data_2015) == "electorate"] <- "electorate_2015"
+colnames(data_2015)[names(data_2015) == "mean_tax_000s"] <- "mean_tax_000s_2015"
+colnames(data_2015)[names(data_2015) == "political_score"] <- "political_score_2015"
+colnames(data_2015)[names(data_2015) == "govt_funds_per_person"] <- "govt_funds_per_person_2015"
+
+colnames(data_2016)[names(data_2016) == "pc_immun"] <- "pc_immun_2016"
+colnames(data_2016)[names(data_2016) == "pc_immun_class"] <- "pc_immun_class_2016"
+colnames(data_2016)[names(data_2016) == "IRSAD_SCORE"] <- "IRSAD_SCORE_2016"
+colnames(data_2016)[names(data_2016) == "electorate"] <- "electorate_2016"
+colnames(data_2016)[names(data_2016) == "mean_tax_000s"] <- "mean_tax_000s_2016"
+colnames(data_2016)[names(data_2016) == "political_score"] <- "political_score_2016"
+colnames(data_2016)[names(data_2016) == "govt_funds_per_person"] <- "govt_funds_per_person_2016"
+
+all_data <- merge(data_2015,data_2016,by=c("postcode","state"))
 
 all_data$postcode <- factor(all_data$postcode, ordered=TRUE)
 all_data$state <- factor(all_data$state, ordered=TRUE)
-all_data$pc_immun <- factor(all_data$pc_immun, ordered=TRUE)
-all_data$PHN_code <- factor(all_data$PHN_code, ordered=TRUE)
-all_data$electorate <- factor(all_data$electorate, ordered=TRUE)
+all_data$pc_immun_2015 <- factor(all_data$pc_immun_2015, ordered=TRUE)
+all_data$pc_immun_2016 <- factor(all_data$pc_immun_2016, ordered=TRUE)
+all_data$electorate_2015 <- factor(all_data$electorate_2015, ordered=TRUE)
+all_data$electorate_2016 <- factor(all_data$electorate_2016, ordered=TRUE)
+
+str(all_data)
 
 ```
 
